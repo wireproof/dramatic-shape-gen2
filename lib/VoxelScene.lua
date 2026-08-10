@@ -19,6 +19,7 @@ local Shadows = V.require("Shadows")
 local ChunkMesher = V.require("ChunkMesher")
 local SpriteBillboards = V.require("SpriteBillboards")
 local TileShape = V.require("TileShape")
+local Structures = V.require("Structures")
 local TerrainAtlas = V.require("TerrainAtlas")
 local Voxel = V.require("VoxelState")
 local Sky = V.require("Sky")
@@ -181,14 +182,29 @@ local function groundAt(map, cellX, cellY)
   -- exactly one step -- the "hops like a ledge" seam bug.
   if not map:inBounds(cellX, cellY) then return 0 end
   local shapes = TileShape.forMap(map)
-  local s = shapes[map:cellTile(cellX, cellY)]
+  -- the same full resolution the mesher draws with, NOT the raw tile table:
+  -- on Gen 2 map:cellTile answers a COLLISION CLASS rather than a tile id,
+  -- so indexing the tile shapes with it read some unrelated tile's box and
+  -- stood every character 16px above the ground they were walking on
+  local tx, ty = cellX * 2, cellY * 2 + 1
+  local s = TileShape.at(map, shapes, map:tileAt(tx, ty), tx, ty)
   if not s then return 0 end
+  -- a box the walker passes THROUGH rather than onto: Gen 2 pins its
+  -- doorways solid so the facade closes over them, and the cell they are
+  -- cut into stays walkable
+  if s.art == "upright" and map:isWalkableCell(cellX, cellY) then return 0 end
   -- a recessed class (water) still supports whatever stands on it; only
   -- raised ground lifts the model.  Stairs never do: the class height is
   -- the flight's TALL end, but the player enters at floor level and the
   -- warp fires as they step in -- lifting them onto the geometry read as
   -- climbing an invisible block
   if s.art == "stair" then return 0 end
+  -- ...and a cell the mesher gave a MEASURED height to answers with that
+  -- one, not with its class default: the river above a waterfall is drawn
+  -- at the fall's crest (Structures.buildFalls), and a surfer reading the
+  -- class height alone swam four cells under the sheet he was floating on.
+  local measured = Structures.runHeight(map, tx, ty)
+  if measured and measured > 0 then return measured end
   return s.h > 0 and s.h or 0
 end
 
@@ -211,6 +227,11 @@ end
 local function frameFor(def, facing, phase, flip)
   local SR = require("src.render.SpriteRenderer")
   local frame, mirror = 0, false
+  -- SPRITE_POKEMON objects carry a 2-frame party icon with no facing at all,
+  -- so the pose tables (which index up to 5) do not apply to them
+  if def.monIcon then
+    return math.floor((love.timer and love.timer.getTime() or 0) * 4) % 2, false
+  end
   if (def.frames or 1) > 1 then
     frame = (def.walker and phase == 1) and SR.WALK[facing]
             or SR.STAND[facing]

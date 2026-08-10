@@ -14,6 +14,7 @@
 --                  cell coordinates, facing up/down/left/right
 --   SURVEY_LEVELS  comma list of voxel levels 1..3 (default "1,2,3";
 --                  15/35/50 degrees)
+--   SURVEY_TIME    day/night/dusk/dawn pin         (default day)
 --   SHOT_DIR       output directory, must exist    (default "shots")
 --
 -- Levels are set through Pipelines.setLevel, not the player hotkey, so the
@@ -70,6 +71,15 @@ return function(game)
   -- the survey's whole point is reading the voxel geometry: the miniature
   -- blur would soften exactly the edges under inspection
   Pipelines.setLevel("tiltshift", 0)
+
+  -- and reading it under a night palette is reading it through a blue filter
+  local exports = game.mods and game.mods.exports
+  local lib = exports and exports.DRAMATIC_SHAPE and exports.DRAMATIC_SHAPE.lib
+  if lib then
+    local DayNight = lib.require("DayNight")
+    DayNight.setting:sync(os.getenv("SURVEY_TIME") or "day")
+    DayNight.update(0)
+  end
 
   for i, s in ipairs(spots) do
     U.teleport(game, mapId, s.x, s.y, s.facing)

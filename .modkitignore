@@ -8,8 +8,11 @@ tests/arena_config.lua
 tests/arena_editor.lua
 tests/arena_pick.lua
 tests/battle_shots.lua
+tests/_diag_unclaimed.lua
 tests/dramatic_shape_test.lua
+tests/gen2_compat_test.lua
 tests/voxel_anim_probe.lua
+tests/voxel_class_probe.lua
 tests/voxel_door_probe.lua
 tests/voxel_mem_probe.lua
 tests/voxel_perf_probe.lua
@@ -26,6 +29,7 @@ tools/build_voxels.py
 tools/contact_sheets.py
 tools/building_images.py
 tools/building_voxels.py
+tools/dump_shiny_palettes.lua
 tools/voxel-survey.md
 assets/docs/buidling_to_voxel/sprite_extract.py
 assets/docs/buidling_to_voxel/voxel_build_verify.py

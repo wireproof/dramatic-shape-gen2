@@ -49,6 +49,11 @@
 -- the mod namespace (see main.lua): V.require loads a sibling module
 local V = ...
 
+-- The modkit exercises installInput without booting LÖVE. In that
+-- headless path these callback slots are harmless; in-game this aliases
+-- the real global callback table.
+local love = rawget(_G, "love") or {}
+
 local Mat4 = V.require("Mat4")
 local Voxel3D = V.require("Voxel3D")
 local Pokeball = V.require("Pokeball")

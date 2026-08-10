@@ -36,6 +36,11 @@
 -- the mod namespace (see main.lua): V.require loads a sibling module
 local V = ...
 
+-- Strict package validation loads this module without the LÖVE runtime.
+-- The real game supplies this table; a local fallback leaves mouse hooks
+-- inert during headless checks while preserving the normal callback chain.
+local love = rawget(_G, "love") or {}
+
 local Voxel = V.require("VoxelState")
 local Voxel3D = V.require("Voxel3D")
 local FirstPerson = V.require("FirstPerson")

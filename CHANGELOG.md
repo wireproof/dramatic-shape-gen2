@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.8.0-gen2.1
+
+### Added
+
+- Forward-ported UNDERdecoded's Generation II compatibility work from the
+  released Gen2 Dramatic Shape package onto the supplied 1.8.0 codebase.
+- Added Generation II collision-class shapes, Johto and Kanto tileset
+  profiles, building templates, indoor room shells, terraces, waterfalls,
+  rails, caves, and raised-ground handling.
+- Added Gen2Recomped atlas handling so animated Generation II outdoor maps
+  retain their true-colour palettes.
+- Preserved Gen 2's registered-item use of SELECT; the voxel camera only
+  claims SELECT when no valid registered item owns the button.
+
+### Compatibility
+
+- Based on Dramatic Shape 1.8.0.
+- Target host: Gen2Recomped 0.5.1b-hotfix.
+- Port revision: gen2.1.
+
 ## Unreleased
 
 ### Added

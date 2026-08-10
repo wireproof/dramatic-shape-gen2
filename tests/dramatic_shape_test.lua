@@ -864,7 +864,7 @@ do
   -- named rather than counted: a count says "something moved" and this says
   -- WHAT is meant to be reachable. SMOOTH TURN is absent because VR is off,
   -- which is its own gate and is tested where VR is turned on.
-  local want = { "grid", "curve", "viewbox", "water", "daytime",
+  local want = { "shinyOdds", "grid", "curve", "viewbox", "water", "daytime",
                  "battles", "battleBack", "letsgo", "stadiumRom",
                  "atmos", "shadows", "aa", "vr" }
   local n = 0
@@ -1491,6 +1491,7 @@ local function fakeMap(id)
   return setmetatable({
     id = id,
     def = { width = 2, height = 2, blocks = { 1, 1, 1, 1 }, borderBlock = 0 },
+    blockPatch = {},
   }, Map)
 end
 
@@ -3042,11 +3043,10 @@ T.check(plain:find("LOVE_HIGHP_OR_MEDIUMP vec3 vBent", 1, true) ~= nil,
 T.check(plain:find("LOVE_HIGHP_OR_MEDIUMP Image depthTex", 1, true) ~= nil,
   "and the depth sampler is lifted off lowp, which is eight bits of depth")
 T.check(plain:find(
-    "effect(mediump vec4 color, Image tex, mediump vec2 tc, mediump vec2 sc)",
+    "effect(EFFECT_PREC vec4 color, Image tex, EFFECT_PREC vec2 tc,",
     1, true) ~= nil,
-  "effect()'s own floats stay pinned to LOVE's prototype precision -- the "
-  .. "Xclipse compiler reads a definition that drifted from the forward "
-  .. "declaration as an illegal overload and refuses the whole shader")
+  "effect()'s floats use the precision macro selected for LOVE's prototype "
+  .. "so Xclipse does not read a mismatched definition as an overload")
 T.check(plain:find("sc / love_ScreenSize.xy", 1, true) ~= nil,
   "the depth test normalises the pixel coord by the canvas's own pixel "
   .. "size -- `screen` counts canvas UNITS, and on a highdpi phone the two "

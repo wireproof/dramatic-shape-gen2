@@ -111,6 +111,17 @@ local Horde = V.require("Horde")
 local HordeGun = V.require("HordeGun")
 local HordeHud = V.require("HordeHud")
 local HordeSfx = V.require("HordeSfx")
+local HordeGameOver = V.require("HordeGameOver")
+local HordeExitPrompt = V.require("HordeExitPrompt")
+
+-- Horde mode runs over the live overworld, but its two blocking cards are
+-- ordinary host screens and its sounds are ordinary chip-SFX records. Keep
+-- those registrations with the rest of the declared content so Gen1Recomp
+-- and Gen2Recomped both merge them before play begins.
+mod.content.screens:register("HordeGameOver", { new = HordeGameOver.new })
+mod.content.screens:register("HordeExitPrompt", { new = HordeExitPrompt.new })
+HordeSfx.register(mod)
+
 -- LET'S GO: the flick-to-throw capture mode. LetsGo owns the row, the
 -- wraps and the experience math; CatchThrow the session (input, arc,
 -- ring, choreography); Pokeball the animated prop they throw.
@@ -483,7 +494,7 @@ local SETTINGS = {
   -- an encounter rate is a rule of the game. A player inside FULL must be
   -- able to reach it, and FULL must never set it.
   { Shiny.setting,
-    "How often a wild Pokemon turns up shiny. 1:8192 is the games' own "
+    "How often a wild Pokemon turns up shiny; 1:8192 is the games' own "
     .. "rate, and every rung below it is twice as often as the one above.",
     cat = SettingsMenu.ROOT, full = true },
 
@@ -1251,18 +1262,33 @@ CamControl.install()
 -- the step is refused (mid-warp, no 3D pass) the press falls through to
 -- the engine's own handling, which is a no-op, as ever.
 --
+-- Gen 2 is the exception: SELECT uses a registered key item in the
+-- overworld. A valid registration keeps the button for the game; with no
+-- registered item, SELECT remains free to step the voxel camera ladder.
+--
 -- Installed AFTER FreeMove.install, deliberately: its wrap must sit
 -- OUTSIDE the free walk's, or first person -- where FreeMove.tick takes
 -- the frame and never calls further in -- would eat the button, and the
 -- one rung SELECT could not step off of would be 1ST itself.
 do
   local OverworldState = require("src.world.OverworldController")
+  local GameVersion = require("src.core.GameVersion")
+  local function registeredItemOwnsSelect(Game)
+    if not (GameVersion.isGen2 and GameVersion.isGen2()) then return false end
+    local save = Game and Game.save
+    local id = save and save.registeredItem
+    if not id then return false end
+    local def = Game.data and Game.data.items and Game.data.items[id]
+    return (def and def.registerable and save.inventory
+            and save.inventory[id]) and true or false
+  end
   if not OverworldState.dramaticShapeSelectHook then
     local inner = OverworldState.handleInput
     function OverworldState:handleInput(...)
       local Game = require("src.core.Game")
       local input = Game.input
-      if input and input.wasPressed and input:wasPressed("select") then
+      if input and input.wasPressed and input:wasPressed("select")
+         and not registeredItemOwnsSelect(Game) then
         if cycleVoxel(Game) then return end
       end
       return inner(self, ...)
@@ -1415,7 +1441,7 @@ mod.hooks:wrap("world.tod", function(next, tod, ctx)
   return DayNight.tod()
 end)
 
-mod.exports.version = "1.5.5"
+mod.exports.version = "1.8.0-gen2.1"
 -- exposed so a companion mod can pin its own tiles' shapes or read the
 -- camera without reaching into this mod's file layout
 mod.exports.lib = V

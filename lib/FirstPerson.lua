@@ -50,6 +50,11 @@
 -- the mod namespace (see main.lua): V.require loads a sibling module
 local V = ...
 
+-- The game always provides LÖVE, while the modkit's strict loader does not.
+-- Keep the input hooks inert in headless validation instead of requiring the
+-- host to manufacture global callbacks that this module owns only at runtime.
+local love = rawget(_G, "love") or {}
+
 local Mat4 = V.require("Mat4")
 local Voxel = V.require("VoxelState")
 local Voxel3D = V.require("Voxel3D")

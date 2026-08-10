@@ -2,8 +2,22 @@
 
 Redistribution of non-derivative code is expressly prohibited after v1.6.0 without permission.
 
+> **Gen2 compatibility port:** this working build forward-ports
+> UNDERdecoded's Generation II support onto Dramatic Shape 1.8.0. It targets
+> Gen2Recomped `0.5.1b-hotfix` while retaining the Gen 1 features present in
+> the supplied 1.8.0 release. The port revision is `1.8.0-gen2.1`.
+>
+> **Distribution status:** keep this repository private unless the Dramatic
+> Shape copyright holder grants permission to redistribute the post-1.6.0
+> source. See [`PORT-NOTICE.md`](PORT-NOTICE.md). This restriction does not
+> erase the MIT grant covering UNDERdecoded's Generation II modifications.
+
 A mod for the [Pokémon Gen 1 Recompilation
 Project](https://github.com/bryanthaboi/pokemon-gen1-recomp-project).
+
+This port also supports Pokémon Gold and Silver through
+[Gen2Recomped](https://github.com/UNDERdecoded/Gen2Recomped). Pokémon Crystal
+support remains limited by the host rather than claimed by this mod.
 
 The overworld as a voxelized 3D diorama. Also supports experimental
 first-person, third-person and VR.
