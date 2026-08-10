@@ -52,6 +52,7 @@ local V = ...
 
 local Assets = require("src.render.Assets")
 local Structures = V.require("Structures")
+local Buildings = V.require("Buildings")
 local TileShape = V.require("TileShape")
 local Voxel3D = V.require("Voxel3D")
 local Budget = V.require("BuildBudget")
@@ -101,6 +102,12 @@ local SIDES = {
   { 0, 1, 5 },    -- +Z south
   { 0, -1, 6 },   -- -Z north
 }
+
+-- How far sideways a face reaches for ordinary wall when the column it
+-- stands over draws a doorway or a sign (see wallTile), nearest ring
+-- first. Left before right at each distance is arbitrary and only decides
+-- symmetric cases.
+local SPAN = { { -1, 1 }, { -2, 2 } }
 
 local function keyOf(tx, ty)
   return (ty + 64) * 4096 + (tx + 64)
@@ -246,6 +253,32 @@ local function runGeometry(map, bodyOnly, masks, sink, waterSink)
     if run then return run.h end
     local s = S.shapeAt[k]
     return s and s.h or 0
+  end
+
+  -- The tiles that belong on a DRAWN FACADE and nowhere else -- doorways,
+  -- shop signs, the gyms' lettering (data/voxel_heights.lua `frontOnly`).
+  -- A volume folds its column's drawing up all four sides, so without this
+  -- a house's back and flanks each carry their own copy of its front door.
+  -- The face keeps the same map row and reaches sideways for an ordinary
+  -- column instead, which is the neighbouring course of the same wall.
+  -- The search stays inside the structure -- a neighbour column with no run
+  -- of its own is the ground beside the building, and a doorway that
+  -- borrowed grass would be a hole. Two columns is as far as it needs to
+  -- reach: every doorway in the game is two tiles wide.
+  local frontOnly = Buildings.frontOnly(tileset.id)
+  local function wallTile(tx, ty)
+    local tile = map:tileAt(tx, ty)
+    if not (frontOnly and frontOnly[tile]) then return tile end
+    for d = 1, 2 do
+      for _, nx in ipairs(SPAN[d]) do
+        nx = tx + nx
+        if S.runs[keyOf(nx, ty)] then
+          local n = map:tileAt(nx, ty)
+          if not frontOnly[n] then return n end
+        end
+      end
+    end
+    return tile
   end
 
   -- one atlas-rect UV, optionally cropped to art rows [vTop, vBot] of 8
@@ -605,13 +638,16 @@ local function runGeometry(map, bodyOnly, masks, sink, waterSink)
                   -- drawing itself (full brightness); the other sides wear
                   -- the same rows darkened, so a building's flank matches
                   -- its face instead of smearing one tile
+                  local sy
                   if d == 6 then
-                    src = map:tileAt(tx, math.min(run.front,
-                                                  run.north + band))
+                    sy = math.min(run.front, run.north + band)
                   else
-                    src = map:tileAt(tx, math.max(run.north,
-                                                  run.front - band))
+                    sy = math.max(run.north, run.front - band)
                   end
+                  -- the south face IS the drawing and keeps every tile of
+                  -- it; the back and the flanks are the same wall seen from
+                  -- somewhere the door and the sign are not
+                  src = (d == 5) and map:tileAt(tx, sy) or wallTile(tx, sy)
                   if d == 5 then shade = 1 end
                 elseif s.art == "upright" then
                   -- profile-authored upright (a pinned wall or furniture
@@ -812,18 +848,25 @@ function ChunkMesher.build(map, bodyOnly, masks, split)
   return sink.finish(), waterSink and waterSink.finish() or nil
 end
 
-local function quadsMesh(quads)
+local function quadsMesh(quads, grass)
   if #quads == 0 then return nil end
   local verts, indices, n = {}, {}, 0
   for _, q in ipairs(quads) do
     for i = 1, 4 do
       local c = q[i]
       local uv = q.uv and q.uv[i] or { q.u, q.v }
-      verts[#verts + 1] = { c[1], c[2], c[3], uv[1], uv[2], q.shade }
+      local v = { c[1], c[2], c[3], uv[1], uv[2], q.shade }
+      if grass then
+        v[7], v[8], v[9], v[10] = q.sway or 0, q.cx or 0,
+                                     q.cz or 0,
+                                     q.firefly and 2 or (q.leaf and 1 or 0)
+      end
+      verts[#verts + 1] = v
     end
     Voxel3D.pushQuad(indices, n)
     n = n + 1
   end
+  if grass then return Voxel3D.newGrassMesh(verts, indices) end
   return Voxel3D.newMesh(verts, indices)
 end
 
@@ -832,7 +875,7 @@ end
 -- walker's feet (characters stamp over terrain, Gen 1 style, so ordinary
 -- terrain could never do this).
 local function buildGrassMesh(map)
-  return quadsMesh(Structures.forMap(map).grassQuads)
+  return quadsMesh(Structures.forMap(map).grassQuads, true)
 end
 
 -- The flower billboards as their own mesh, for the same reason as the

@@ -601,9 +601,22 @@ local PLANTER_SPRAY = { rows = 24, depth = 5 }
 -- states no profile, the honest reading is the one the thin standee pools
 -- exist for: the foliage stands as a per-pixel slab and keeps the airy
 -- silhouette that makes it read as leaves.
+-- `squash`, when given, is the PERCENT of its revolved depth every chord
+-- keeps -- 100 (or nil) is the identity, 50 halves the hull front to back.
+--
+-- A full revolve assumes the drawing's width is also its depth, which is
+-- true of a thing that really is round in plan (a hedge ball, a boulder,
+-- a trash can). A TREE is round in its canopy and thin at every other
+-- reading: the trunk is a stick, the crown is more air than wood, and the
+-- drawing is scenery seen from one side. Revolved at full width the little
+-- tree eats a whole cell of depth and reads as a boulder wearing bark, so
+-- the plan stays a circle and shrinks toward an ellipse: still round in
+-- section, still stepping pixel by pixel, just shallower. The chord is
+-- re-centred on the mid-plane, so the model neither slides nor detaches
+-- from the cells around it.
 local function roundTemplate(S, map, data, cx, cy, groundTiles, N, capRows,
                              NYin, spray, baseRows, bodyRows, wellRows,
-                             taperVox)
+                             taperVox, squash)
   -- The canvas is NX wide and NX DEEP (a hull is round in plan, so its
   -- depth is its width) by NY tall. NX = 16 is one cell, 32 a 2x2-cell
   -- group; NY defaults to NX -- a ball -- and NY = 2 * NX is a drawing
@@ -864,6 +877,7 @@ local function roundTemplate(S, map, data, cx, cy, groundTiles, N, capRows,
                                        + 0.5))
           end
           if spray and iy < spray.rows then n = math.min(n, spray.depth) end
+          if squash then n = math.max(1, math.floor(n * squash / 100 + 0.5)) end
           z0[i] = math.floor(N2 - n / 2 + 0.5)
           z1[i] = z0[i] + n
           -- a row the can's body band was repeated into wears the row it
@@ -974,6 +988,9 @@ local function roundTemplate(S, map, data, cx, cy, groundTiles, N, capRows,
               if hw * hw > dx * dx then
                 n = math.max(1, math.floor(2 * math.sqrt(hw * hw - dx * dx)
                                            + 0.5))
+              end
+              if squash then
+                n = math.max(1, math.floor(n * squash / 100 + 0.5))
               end
               z0[i] = math.floor(N2 - n / 2 + 0.5)
               z1[i] = z0[i] + n
@@ -1298,6 +1315,8 @@ function Structures.buildCylinders(S, map, x0, x1, y0, y1, groundTiles)
   -- voxels the body band is repeated up to
   local stumpCap, canCap, canBase, canHeight, canWell, canTaper
     = 6, 9, 4, 9, 5, 4
+  -- the sapling class's depth, as a PERCENT of the revolved chord
+  local saplingSquash = 50
   do
     local okP, prof = pcall(V.data, "voxel_heights")
     local entry = okP and type(prof) == "table" and prof.tilesets
@@ -1319,6 +1338,9 @@ function Structures.buildCylinders(S, map, x0, x1, y0, y1, groundTiles)
     end
     if entry and type(entry.can_taper) == "number" then
       canTaper = entry.can_taper
+    end
+    if entry and type(entry.sapling_squash) == "number" then
+      saplingSquash = entry.sapling_squash
     end
   end
 
@@ -1439,13 +1461,19 @@ function Structures.buildCylinders(S, map, x0, x1, y0, y1, groundTiles)
         local tall = s.class == "can" and canHeight or nil
         local well = s.class == "can" and canWell or nil
         local taper = s.class == "can" and canTaper or nil
+        -- 100% is the full revolve, so it is the identity: never signed
+        -- into the cache key, and never passed, by a class that has no
+        -- squash of its own
+        local squash = (s.class == "sapling" and saplingSquash ~= 100)
+                       and saplingSquash or nil
         local ground = false
         if data then
           local sig = tsid .. (cap and ("|c" .. cap) or "")
             .. (base and ("|b" .. base) or "")
             .. (tall and ("|h" .. tall) or "")
             .. (well and ("|w" .. well) or "")
-            .. (taper and ("|t" .. taper) or "") .. "|"
+            .. (taper and ("|t" .. taper) or "")
+            .. (squash and ("|q" .. squash) or "") .. "|"
             .. gsig .. "|" .. table.concat({
             S.tileAt[k], S.tileAt[keyOf(cx * 2 + 1, cy * 2)],
             S.tileAt[keyOf(cx * 2, cy * 2 + 1)],
@@ -1454,7 +1482,7 @@ function Structures.buildCylinders(S, map, x0, x1, y0, y1, groundTiles)
           if not tpl then
             local tq, tbg = roundTemplate(S, map, data, cx, cy,
                                           groundTiles, 16, cap, nil, nil,
-                                          base, tall, well, taper)
+                                          base, tall, well, taper, squash)
             tpl = { quads = tq, bg = tbg }
             roundCache[sig] = tpl
           end
@@ -3289,6 +3317,83 @@ end
 
 -- ---- tall grass ----
 
+-- ---- closing a standee's sides ----
+--
+-- The grass tufts and the flowers are both built the same way: each row of
+-- the 8x8 drawing becomes a horizontal RUN of lit pixels, stood up as a
+-- front face and a back face one voxel apart, with a lid on top. What that
+-- leaves open is the two ENDS of every run -- so the slab was a pair of
+-- billboards rather than a solid, and from any angle off square you looked
+-- in through the edge and straight out the other side. At the low cameras
+-- this mod has grown (1ST, 3RD, the battle's floor-level seat) that is
+-- most of the time.
+--
+-- A wall goes on an end only where the pixel beyond it is actually clear,
+-- which for a run's end it is by construction -- except where two runs on
+-- the same row meet across a gap of nothing, which cannot happen, and at
+-- the tile's border, where the neighbouring tile's own standee may or may
+-- not continue the shape. The border is closed anyway: tufts sit on their
+-- own half-cells with a gap between them, so an open border edge is a hole
+-- in the open, not a seam with anything.
+--
+-- Each wall samples ONE texel at its centre -- the end pixel it is closing
+-- off -- so it wears that pixel's own colour, which is the nearest coloured
+-- pixel to the surface being filled. Sampling a single texel is also what
+-- carries the animation: when a frame keys that pixel out, the wall's own
+-- fragments discard with the faces either side of it, so a swaying tuft
+-- never leaves a wall standing where its blade no longer is.
+-- `everyPixel` is for a standee whose silhouette ANIMATES. The mesh is
+-- built once, over the UNION of every frame's mask, and each frame is cut
+-- out again in texture space -- so a run that is six pixels wide in the
+-- union may be two pixels wide in the frame on screen, and the four pixels
+-- that dropped out took the union's end walls with them. What is left
+-- exposed is an interior boundary, which had no wall because in the union
+-- it was not a boundary at all. That is the gap that survived closing the
+-- run ends: the first frame looked solid and every other frame did not.
+--
+-- So an animated standee gets a wall on BOTH sides of EVERY pixel. A wall
+-- between two lit pixels is enclosed by the front and back faces and never
+-- seen; the moment its neighbour is keyed out it becomes the edge, already
+-- in place and already wearing the right colour. Each is inset a hair into
+-- its own pixel so the two that meet at a boundary are not coplanar -- the
+-- voxel pass draws with culling off, and two quads in the same plane would
+-- z-fight rather than politely take turns.
+local SIDE_INSET = 0.03
+
+local function sideQuads(quads, ix, ix2, yBot, yTop, zB, zF,
+                         ax0, ay0, atlasW, atlasH, py, lit, everyPixel)
+  local function texel(px)
+    return (ax0 + px + 0.5) / atlasW, (ay0 + py + 0.5) / atlasH
+  end
+  local function left(px, at)
+    local u, v = texel(px)
+    quads[#quads + 1] = {                 -- facing -X
+      { at, yBot, zB }, { at, yBot, zF },
+      { at, yTop, zF }, { at, yTop, zB },
+      uv = { { u, v }, { u, v }, { u, v }, { u, v } },
+      shade = OBJ_SHADE.side,
+    }
+  end
+  local function right(px, at)
+    local u, v = texel(px)
+    quads[#quads + 1] = {                 -- facing +X
+      { at, yBot, zF }, { at, yBot, zB },
+      { at, yTop, zB }, { at, yTop, zF },
+      uv = { { u, v }, { u, v }, { u, v }, { u, v } },
+      shade = OBJ_SHADE.side,
+    }
+  end
+  if everyPixel then
+    for px = ix, ix2 do
+      left(px, px + SIDE_INSET)
+      right(px, px + 1 - SIDE_INSET)
+    end
+    return
+  end
+  if not lit(ix - 1, py) then left(ix, ix) end
+  if not lit(ix2 + 1, py) then right(ix2, ix2 + 1) end
+end
+
 -- A tall-grass CELL is four tufts: 2x2 tiles, and each 8x8 tile is one
 -- whole clump of grass. Each tile stands as its own thin per-pixel slab
 -- at ITS OWN depth -- the cell's north tile row in the north half of the
@@ -3359,6 +3464,20 @@ local function grassTemplate(map, data, tileId)
             shade = 1,
           }
         end
+        -- and underneath, where a blade ends in mid-air over the ground
+        if not opaque(ix, iy + 1) then
+          quads[#quads + 1] = {
+            { ix, yBot, zF }, { ix2 + 1, yBot, zF },
+            { ix2 + 1, yBot, zB }, { ix, yBot, zB },
+            uv = { { u0, v1 }, { u1, v1 }, { u1, v1 }, { u0, v1 } },
+            shade = OBJ_SHADE.bottom,
+          }
+        end
+        -- and the run's two end walls, which is what makes a blade a solid
+        -- thing rather than two billboards you can see between (sideQuads
+        -- above argues it, and why each wall wears its end pixel's colour)
+        sideQuads(quads, ix, ix2, yBot, yTop, zB, zF,
+                  ax0, ay0, atlasW, atlasH, iy, opaque)
         ix = ix2 + 1
       else
         ix = ix + 1
@@ -3389,13 +3508,49 @@ function Structures.buildGrass(S, map, x0, x1, y0, y1, data)
           templates[tileId] = tpl
         end
         local wx, wz = tx * 8, ty * 8
+        -- Stable diagonal phase per tuft. Both ends of every quad receive
+        -- the same value, so a gust bends the slab without shearing it.
+        local sway = wx * 0.050 + wz * 0.031
         for _, q in ipairs(tpl) do
           quads[#quads + 1] = {
             { q[1][1] + wx, q[1][2], q[1][3] + wz },
             { q[2][1] + wx, q[2][2], q[2][3] + wz },
             { q[3][1] + wx, q[3][2], q[3][3] + wz },
             { q[4][1] + wx, q[4][2], q[4][3] + wz },
-            uv = q.uv, shade = q.shade,
+            uv = q.uv, shade = q.shade, sway = sway,
+            cx = wx + 4, cz = wz + 4,
+          }
+        end
+
+        -- Sparse wind-borne leaf. It reuses one opaque grass texel and is
+        -- animated entirely on the GPU, so no per-frame Lua particles exist.
+        if #tpl > 0 and ((tx * 13 + ty * 7) % 11 == 0) then
+          local src = tpl[1]
+          local uv = src.uv and src.uv[1] or { src.u, src.v }
+          local lx = wx + 2 + ((tx * 5 + ty * 3) % 5)
+          local lz = wz + 4
+          local ly, size = 9 + ((tx + ty) % 3), 1.25
+          quads[#quads + 1] = {
+            { lx - size, ly,        lz }, { lx + size, ly,        lz },
+            { lx + size, ly + size, lz }, { lx - size, ly + size, lz },
+            uv = { uv, uv, uv, uv }, shade = 1, sway = sway + 0.73,
+            cx = lx, cz = lz, leaf = true,
+          }
+        end
+
+        -- Rarer one-pixel firefly. Geometry exists all day, but the shader
+        -- gives it zero glow outside outdoor night.
+        if #tpl > 0 and ((tx * 17 + ty * 11) % 29 == 0) then
+          local src = tpl[1]
+          local uv = src.uv and src.uv[1] or { src.u, src.v }
+          local fx = wx + 2 + ((tx * 3 + ty * 5) % 5)
+          local fz = wz + 4
+          local fy, half = 9 + ((tx + ty) % 4), 0.5
+          quads[#quads + 1] = {
+            { fx - half, fy,     fz }, { fx + half, fy,     fz },
+            { fx + half, fy + 1, fz }, { fx - half, fy + 1, fz },
+            uv = { uv, uv, uv, uv }, shade = 1, sway = sway + 1.37,
+            cx = fx, cz = fz, firefly = true,
           }
         end
       end
@@ -3526,17 +3681,51 @@ local function flowerTemplate(map, data, tileId)
           uv = { { u1, v1 }, { u0, v1 }, { u0, v0 }, { u1, v0 } },
           shade = OBJ_SHADE.back,
         }
-        -- petal tips: a top strip where the row above is clear. The
-        -- strip samples its own row's texel, so a tip that is not in
-        -- the current frame discards with the face beneath it
-        if not on(ix, py - 1) then
-          quads[#quads + 1] = {
-            { ix, yTop, zB }, { ix2 + 1, yTop, zB },
-            { ix2 + 1, yTop, zF }, { ix, yTop, zF },
-            uv = { { u0, v0 }, { u1, v0 }, { u1, v0 }, { u0, v0 } },
+        -- ------- the shell, closed on all four remaining faces
+        --
+        -- A flower SWAYS: the geometry spans the union of every animation
+        -- frame's mask and each frame is cut back out of it in texture
+        -- space (see the header). So "is there a pixel next door" has two
+        -- different answers -- one in the union this mesh was built from,
+        -- and one in the frame actually on screen -- and only the second
+        -- decides what is exposed.
+        --
+        -- Closing the union's own edges is therefore not enough, and was
+        -- the bug the first cut of this shipped: the base frame looked
+        -- solid and every other frame still had gaps, because a pixel that
+        -- drops out of a frame takes the union's wall with it and leaves an
+        -- interior boundary that never had one.
+        --
+        -- So every pixel gets a cap on all four of its remaining faces,
+        -- whatever its neighbours do. A cap between two lit pixels sits
+        -- inside the slab, enclosed by the front and back faces, and is
+        -- never seen; the moment its neighbour is keyed out it IS the edge,
+        -- already there and already wearing the right colour. Each samples
+        -- its own pixel's texel, so it appears and vanishes with the pixel
+        -- it belongs to rather than with the one it is closing off.
+        --
+        -- Inset a hair into its own pixel, because the voxel pass draws
+        -- with culling off: the two caps that meet at a boundary would be
+        -- coplanar and z-fight rather than politely take turns.
+        for px = ix, ix2 do
+          local tu = (ax0 + px + 0.5) / atlasW
+          local tv = (ay0 + py + 0.5) / atlasH
+          local xa, xb = px, px + 1
+          local yT = yTop - SIDE_INSET
+          local yB = yBot + SIDE_INSET
+          quads[#quads + 1] = {           -- the pixel's own lid
+            { xa, yT, zB }, { xb, yT, zB }, { xb, yT, zF }, { xa, yT, zF },
+            uv = { { tu, tv }, { tu, tv }, { tu, tv }, { tu, tv } },
             shade = OBJ_SHADE.top,
           }
+          quads[#quads + 1] = {           -- and its floor
+            { xa, yB, zF }, { xb, yB, zF }, { xb, yB, zB }, { xa, yB, zB },
+            uv = { { tu, tv }, { tu, tv }, { tu, tv }, { tu, tv } },
+            shade = OBJ_SHADE.bottom,
+          }
         end
+        sideQuads(quads, ix, ix2, yBot, yTop, zB, zF,
+                  ax0, ay0, atlasW, atlasH, py, on, true)
         ix = ix2 + 1
       else
         ix = ix + 1

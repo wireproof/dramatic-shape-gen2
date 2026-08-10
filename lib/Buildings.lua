@@ -134,8 +134,111 @@ local function profile()
 end
 
 local models = {}          -- "<tileset>:<index>" -> prebuilt local quads
+local frontSets = {}       -- tileset id -> { [tile] = true } or false
+
+-- The tileset's front-only tiles as a set (data/voxel_heights.lua
+-- `frontOnly`): the doorways, shop signs and painted lettering that belong
+-- on a facade and on no other face of the same building. nil when the
+-- tileset names none, which is every indoor one.
+function Buildings.frontOnly(tilesetId)
+  local hit = frontSets[tilesetId]
+  if hit == nil then
+    local s = profile()
+    local list = s and s.frontOnly and s.frontOnly[tilesetId]
+    if list then
+      hit = {}
+      for _, id in ipairs(list) do hit[id] = true end
+    else
+      hit = false
+    end
+    frontSets[tilesetId] = hit
+  end
+  return hit or nil
+end
 
 -- ------------------------------------------------------------------ read --
+
+-- Which sprite pixel a BACK-facing voxel shows, where that is not the one
+-- the front shows. The facade extrudes straight through the footprint, so
+-- the far wall is the drawing again -- and read from behind it is the
+-- drawing mirrored, doorway, shop sign, GYM lettering and all. Those tiles
+-- are named per tileset in data/voxel_heights.lua `frontOnly`; every cell
+-- wearing one takes the art of an ordinary cell beside it in the same tile
+-- row.
+--
+-- The donor is chosen per RUN of front-only cells, not per cell, so a
+-- two-tile doorway comes out as two tiles of the SAME wall rather than
+-- borrowing left from one side and right from the other. Between the two
+-- neighbours the one whose tile the row uses more often wins, which is
+-- what reaches past a gable's sloped corner (a 4x2 house draws its door
+-- against the slope: the corner is unique to the row, the wall beside it
+-- is not) for the wall the back should actually wear.
+--
+-- Returns a SPARSE map, sprite index -> sprite index, empty entries meaning
+-- "unchanged"; nil when the drawing has no front-only tile at all, which is
+-- most of them.
+local function backMap(tiles, bw, bh, W, inside, frontOnly)
+  if not frontOnly then return nil end
+  local donor, any = {}, false
+  for r = 1, bh do
+    local row = tiles[r]
+    local freq = {}
+    for c = 1, bw do
+      local id = row[c]
+      if not frontOnly[id] then freq[id] = (freq[id] or 0) + 1 end
+    end
+    local c = 1
+    while c <= bw do
+      if frontOnly[row[c]] then
+        local c1 = c
+        while c1 < bw and frontOnly[row[c1 + 1]] do c1 = c1 + 1 end
+        local l, rt = c - 1, c1 + 1
+        local pick = nil
+        if l >= 1 and rt <= bw then
+          pick = ((freq[row[rt]] or 0) > (freq[row[l]] or 0)) and rt or l
+        elseif l >= 1 then
+          pick = l
+        elseif rt <= bw then
+          pick = rt
+        end
+        -- a row that is front-only end to end has no donor; it keeps its
+        -- own art rather than inventing one
+        if pick then
+          for k = c, c1 do donor[(r - 1) * bw + (k - 1)] = pick - 1 end
+          any = true
+        end
+        c = c1 + 1
+      else
+        c = c + 1
+      end
+    end
+  end
+  if not any then return nil end
+
+  local back = {}
+  for cell, dc in pairs(donor) do
+    local r, c = math.floor(cell / bw), cell % bw
+    for oy = 0, 7 do
+      local sy = r * 8 + oy
+      for ox = 0, 7 do
+        local i = sy * W + c * 8 + ox
+        local j = sy * W + dc * 8 + ox
+        -- The donor must be DRAWN, or the substitution would hand the wall
+        -- a texel from outside the silhouette. One row up is tried first,
+        -- because the drawing's last row is the black threshold the
+        -- building stands on: the doorway paints it (a door sits on the
+        -- ground) and the wall beside it does not, so at the base course
+        -- the same row of the donor column is off the shape. The model
+        -- lifts that column's foot by exactly one row for the same reason
+        -- (see `at`), and lifting the donor with it is what makes the back
+        -- wall's bottom course continuous.
+        if not inside[j] then j = j - W end
+        if j >= 0 and inside[j] then back[i] = j end
+      end
+    end
+  end
+  return back
+end
 
 -- Composite the template out of the atlas and flood the silhouette in from
 -- the border. Returns flat arrays indexed y * W + x.
@@ -149,7 +252,7 @@ local models = {}          -- "<tileset>:<index>" -> prebuilt local quads
 -- topRows (placement is still by `tiles` alone); they exist so the MODEL
 -- is built from the complete drawing and the tower rises to its real
 -- height instead of folding as two half-buildings.
-local function read(t, data, perRow)
+local function read(t, data, perRow, frontOnly)
   local tiles = t.tiles
   if t.topRows then
     tiles = {}
@@ -244,7 +347,8 @@ local function read(t, data, perRow)
       end
     end
   end
-  return { W = W, H = H, col = col, ax = ax, ay = ay, inside = inside }
+  return { W = W, H = H, col = col, ax = ax, ay = ay, inside = inside,
+           back = backMap(tiles, bw, bh, W, inside, frontOnly) }
 end
 
 -- --------------------------------------------------------------- measure --
@@ -262,6 +366,27 @@ local function measure(sp, t)
       if sp.inside[y * W + x] then r = y break end
     end
     top[x] = r
+  end
+
+  -- The row a column's roof SURFACE may sink to. `top[x]` is the
+  -- silhouette cap -- the black the drawing closes its shape with -- and
+  -- the depth map spends most of a tapered column's depth above it, so
+  -- clamping onto `top[x]` paints that one outline pixel the length of
+  -- the slope and the courses beat against it. The surface belongs on the
+  -- first PAINTED row instead: the same refusal to let the outline stand
+  -- as a face that the side faces already make below.
+  local surfaceTop = {}
+  for x = 0, W - 1 do
+    local y = top[x]
+    while y < roofRows and sp.inside[y * W + x]
+        and sp.col[y * W + x] == BLACK do
+      y = y + 1
+    end
+    if y < roofRows and sp.inside[y * W + x] then
+      surfaceTop[x] = y
+    else
+      surfaceTop[x] = top[x]
+    end
   end
 
   -- The drawing's own ground line: the row after the last drawn one. A
@@ -386,7 +511,7 @@ local function measure(sp, t)
   -- building. `depthPx` names it in voxels, for an object whose real
   -- depth is not a whole tile row -- the Bike Shop toolbox is a box
   -- standing in the middle of its own cell, not a thing that fills a plot.
-  return { top = top, ytop = ytop,
+  return { top = top, surfaceTop = surfaceTop, ytop = ytop,
            D = t.depthPx or ((t.depth or #t.tiles) * 8),
            ground = ground,
            recess = recess, interior = interior, shadeTexel = shadeTexel }
@@ -436,7 +561,8 @@ local function deskSetModel(sp, pr, t)
   local function buildParts(plane)
     for _, p in ipairs(t.parts) do
       Budget.tick()
-      local x0, x1 = p.x[1], p.x[2]
+      local x0 = p.x and p.x[1] or 0
+      local x1 = p.x and p.x[2] or (W - 1)
       if p.kind == "flat" then
         -- drawn row = depth row by default; `z` renames the origin when
         -- the flat sits below the desk's own drawn top span (the Center
@@ -557,6 +683,94 @@ local function deskSetModel(sp, pr, t)
                 if sy >= pr0 and sy <= pr1 and inside[i] then
                   put(sx, plane + y, z, i)
                 end
+              end
+            end
+          end
+        end
+      elseif p.kind == "plan" then
+        -- A PLAN part is a slab whose plan IS the drawn top view: the
+        -- band's silhouette becomes the footprint pixel for pixel
+        -- (drawn row = depth row, the same 1:1 every tabletop is drawn
+        -- with), so an octagonal top stands as an octagon rather than
+        -- the box no rectangular band can escape. The top layer wears
+        -- the band itself, outline and all; the rim layers below wear
+        -- the drawn fascia rows folded down the edge (x clamped into
+        -- the drawn fascia's span), and the slab's unseen interior the
+        -- field's dark texel.
+        local r0, r1 = p.rows[1], p.rows[2]
+        local f0, f1 = p.fascia[1], p.fascia[2]
+        local fx0, fx1 = p.fasciaX[1], p.fasciaX[2]
+        local rise = p.rise or 0
+        local h = (f1 - f0 + 1) + 1
+        if rise + h > ytop then ytop = rise + h end
+        local function drawn(sx, z)
+          return sx >= x0 and sx <= x1 and z >= 0 and z <= r1 - r0
+                 and inside[(r0 + z) * W + sx]
+        end
+        for z = 0, r1 - r0 do
+          if z >= 0 and z < D then
+            local sy = r0 + z
+            for sx = x0, x1 do
+              if inside[sy * W + sx] then
+                put(sx, rise + h - 1, z, sy * W + sx)
+                local edge = not (drawn(sx - 1, z) and drawn(sx + 1, z)
+                                  and drawn(sx, z - 1) and drawn(sx, z + 1))
+                for y = rise, rise + h - 2 do
+                  if edge then
+                    local fsx = math.max(fx0, math.min(fx1, sx))
+                    put(sx, y, z, (f0 + (rise + h - 2 - y)) * W + fsx)
+                  else
+                    put(sx, y, z, pr.shadeTexel[DARK])
+                  end
+                end
+              end
+            end
+          end
+        end
+      elseif p.kind == "disc" then
+        -- A DISC part is ROUND IN PLAN -- the pedestal column and base
+        -- the projection can only draw from the front. Centre and
+        -- radius are measured off the drawn widths (a flattened arc is
+        -- a horizontal circle seen from above); the circular footprint
+        -- is synthesized like any continued geometry, and every voxel
+        -- still wears the drawing: the side folds the drawn face-on
+        -- rows around the hull (x clamped into the drawn span, rows
+        -- repeating up the height), and `cap` lays the drawn top-view
+        -- rows over the top layer's interior, drawn north rows to the
+        -- plan's north. `cx2`/`cz2` are DOUBLED plan centres, so an
+        -- even diameter keeps its centre between two voxels instead of
+        -- limping one off.
+        local r, rise, h = p.r, p.rise or 0, p.h
+        local s0, s1 = p.side.rows[1], p.side.rows[2]
+        local sa0, sa1 = p.side.x[1], p.side.x[2]
+        local sn = s1 - s0 + 1
+        if rise + h > ytop then ytop = rise + h end
+        local function inDisc(x, z)
+          local dx = 2 * x + 1 - p.cx2
+          local dz = 2 * z + 1 - p.cz2
+          return dx * dx + dz * dz <= 4 * r * r
+        end
+        local zlo = math.floor((p.cz2 - 2 * r) / 2)
+        for x = math.floor((p.cx2 - 2 * r) / 2),
+                math.floor((p.cx2 + 2 * r) / 2) do
+          for z = math.max(0, zlo),
+                  math.min(D - 1, math.floor((p.cz2 + 2 * r) / 2)) do
+            if inDisc(x, z) then
+              local edge = not (inDisc(x - 1, z) and inDisc(x + 1, z)
+                                and inDisc(x, z - 1) and inDisc(x, z + 1))
+              for y = rise, rise + h - 1 do
+                local sx, sy
+                if p.cap and y == rise + h - 1 and not edge then
+                  local c0, c1 = p.cap.rows[1], p.cap.rows[2]
+                  sy = math.min(c1, c0 + math.floor((z - zlo)
+                                                    * (c1 - c0 + 1)
+                                                    / (2 * r)))
+                  sx = math.max(p.cap.x[1], math.min(p.cap.x[2], x))
+                else
+                  sy = s0 + (rise + h - 1 - y) % sn
+                  sx = math.max(sa0, math.min(sa1, x))
+                end
+                put(x, y, z, sy * W + sx)
               end
             end
           end
@@ -882,6 +1096,7 @@ local function model(sp, pr, t)
   local W, H, D = sp.W, sp.H, pr.D
   local slab, roofRows = t.slab, t.roofRows
   local top, ytop, ground = pr.top, pr.ytop, pr.ground
+  local surfaceTop = pr.surfaceTop
 
   -- The roof's drawn span. A sprite inset from its box (B03) leaves outer
   -- columns undrawn in the roof band; they carry no roof at all, and the
@@ -923,6 +1138,11 @@ local function model(sp, pr, t)
   local T = {}
   for x = 0, W - 1 do T[x] = ytop - top[x] end
 
+  -- the back layer's texel: the drawing again, minus what only the front
+  -- may wear (see backMap)
+  local back = sp.back
+  local function backOf(i) return (back and back[i]) or i end
+
   local function at(x, y, z)
     if x < 0 or x >= W then return nil end
     local tx = T[x]
@@ -931,11 +1151,12 @@ local function model(sp, pr, t)
     if top[x] < roofRows
         and y > tx - slab and y <= tx and z >= rz0 and z <= rz1 then
       if y == tx and x > x0d and x < x1d and z > rz0 and z < rz1 then
-        -- the surface itself. Clamping the row into the column's first
-        -- drawn row keeps the flank battens running down the slope
-        -- instead of falling off the silhouette.
+        -- the surface itself. Lifting the row into the column's first
+        -- PAINTED row keeps the flank battens running down the slope
+        -- instead of falling off the silhouette -- and off its cap, which
+        -- is outline black and belongs to the rim, not to the surface.
         local sy = roofSy[z]
-        if sy < top[x] then sy = top[x] end
+        if sy < surfaceTop[x] then sy = surfaceTop[x] end
         return sy * W + x
       end
       -- The rim reproduces the eave the drawing itself paints under the
@@ -958,7 +1179,11 @@ local function model(sp, pr, t)
     if ledge0 and (z == -2 or z == -1 or z == D or z == D + 1) then
       local sy = ground - 1 - y
       if sy >= ledge0 and sy <= ledge1 and sp.inside[sy * W + x] then
-        return sy * W + x
+        -- z < 0 is the awning's NORTH end: same substitution the wall
+        -- behind it makes, so a band that carries a sign does not carry
+        -- it round the back
+        local i = sy * W + x
+        return z < 0 and backOf(i) or i
       end
       return nil
     end
@@ -980,7 +1205,7 @@ local function model(sp, pr, t)
       if pr.recess[i] then return nil end
       return i
     end
-    if z == 0 then return i end
+    if z == 0 then return backOf(i) end
     return pr.interior[i]
   end
 
@@ -1251,7 +1476,8 @@ function Buildings.build(S, map, data, perRow)
                   -- detector they stood as a second half-building.
                   models[key] = {}
                 else
-                  local sp = read(t, data, perRow)
+                  local sp = read(t, data, perRow,
+                                  Buildings.frontOnly(tileset.id))
                   local pr = measure(sp, t)
                   models[key] = emit(model(sp, pr, t), sp, atlasW, atlasH)
                 end
@@ -1362,6 +1588,7 @@ end
 function Buildings.invalidate()
   spec = nil
   models = {}
+  frontSets = {}
 end
 
 return Buildings
