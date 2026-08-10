@@ -80,6 +80,7 @@ local OBJECT_DEPTH = 6             -- voxel thickness of a detected prop
 -- space is the drawing, and at the 5 voxels `prop` gives, the side faces
 -- of neighbouring strokes close every gap in it off-axis
 local PINNED_DEPTH = { billboard = 10, prop = 5, stool = 10, cutout = 1,
+                       column = 6,
                        console = 10, post = 6, signpost = 2, bike = 2 }
 
 local MAX_ROWS = 6                 -- volume height cap: 48px
@@ -126,12 +127,71 @@ local function voidTiles(tileset)
   return set
 end
 
+-- THE FOUR WALLS OF A ROOM: the 2x2 tile quad to ring an interior with,
+-- or nil to leave it open.
+--
+-- A GSC interior draws only the wall you can SEE from a top-down camera --
+-- the band across the north -- and nothing whatever along its east, west
+-- and south edges, because in two dimensions the view never scrolls past
+-- them.  borderBlockFor answers `false` for such a map (the 2D path fills
+-- the surround black), so meshed literally a room is a strip of furniture
+-- standing on an open plate with one row of panels behind it: the Pokemon
+-- Center read as a shop counter in a field rather than as somewhere you
+-- are standing inside.
+--
+-- So build the missing three out of the room's OWN wall cell.  Which cell
+-- that is is MEASURED rather than authored: the commonest unauthored solid
+-- cell along the north row is the wall band on every interior in the game,
+-- and taking it whole (all four tiles) keeps the band's drawn top and base
+-- courses in the right order when it repeats.  Nothing needs a profile
+-- entry, and a mod's own room shells itself with its own art.
+--
+-- Outdoors this never runs -- out there the surround is a real place, and
+-- TileRenderer.borderBlockFor already says what is in it.
+local function indoorShell(map, shapes)
+  local def = map.def
+  if Map.isOutdoor(def) then return nil end
+  local counts, quads = {}, {}
+  for cx = 0, def.width * 2 - 1 do
+    local tx = cx * 2
+    -- judged on the cell's SW tile, the one collision is read from
+    local s = TileShape.at(map, shapes, map:tileAt(tx, 1), tx, 1)
+    if s and s.art == "upright" and not s.authored then
+      local nw = map:tileAt(tx, 0)
+      counts[nw] = (counts[nw] or 0) + 1
+      quads[nw] = quads[nw]
+        or { nw, map:tileAt(tx + 1, 0), map:tileAt(tx, 1), map:tileAt(tx + 1, 1) }
+    end
+  end
+  local best, bestN = nil, 0
+  for tile, n in pairs(counts) do
+    if n > bestN then best, bestN = tile, n end
+  end
+  return best and quads[best] or nil
+end
+
+-- How far the shell runs out from the body, in TILES.  One cell: what is
+-- wanted is a wall around the room, not a dozen tiles of masonry -- and
+-- black past it is exactly what a room inside an unlit building looks
+-- like.
+local SHELL = 2
+
 -- ----------------------------------------------------------------- build --
 
 local DIRS4 = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } }
 
 local function keyOf(tx, ty)
   return (ty + 64) * 4096 + (tx + 64)
+end
+
+-- The measured height at one tile, or nil -- WITHOUT building the map.
+-- Entity placement asks this every frame and must never be the thing that
+-- forces a build: before the mesher has been round, every cell answers its
+-- class height, which is what it always did.
+function Structures.runHeight(map, tx, ty)
+  local S = cache[map.id]
+  local run = S and S.runs[keyOf(tx, ty)]
+  return run and run.h or nil
 end
 
 function Structures.forMap(map)
@@ -182,11 +242,23 @@ function Structures.forMap(map)
   -- interior's border is black already.
   local hullRingOnly = borderBlk and def.tileset == "OVERWORLD"
                        and (TileRenderer.voidFill or "trees") == "trees"
+  local shell = indoorShell(map, shapes)
   local tw2, th2 = tw, th
+  local function inShell(tx, ty)
+    return shell ~= nil
+      and not (tx >= 0 and ty >= 0 and tx < tw2 and ty < th2)
+      and tx >= -SHELL and ty >= -SHELL
+      and tx < tw2 + SHELL and ty < th2 + SHELL
+  end
   local function tileLookup(tx, ty)
     if tx >= 0 and ty >= 0 and tx < tw2 and ty < th2 then
       return map:tileAt(tx, ty)
     end
+    if inShell(tx, ty) then return shell[(ty % 2) * 2 + (tx % 2) + 1] end
+    -- and NOTHING past it.  An interior's borderBlock is the room's own
+    -- floor on most Gen 2 maps, and a ring of it laid outside the shell
+    -- shows over the top as a lawn of lino running off into the dark.
+    if shell then return nil end
     if not borderBlk then return nil end
     if hullRingOnly and (tx < -ROUND_RING or ty < -ROUND_RING
                          or tx >= tw2 + ROUND_RING
@@ -202,9 +274,18 @@ function Structures.forMap(map)
       local tile = tileLookup(tx, ty)
       if tile then
         local k = keyOf(tx, ty)
-        local s = TileShape.at(map, shapes, tile, tx, ty)
-        if s and void and void[tile] and not s.authored then
-          s = shapes.classes.void
+        local s
+        if inShell(tx, ty) then
+          -- the shell is stated, not detected: off the body map:cellTile
+          -- border-extends into the map's own border block, and asking
+          -- TileShape about it answers with whatever THAT draws -- on an
+          -- interior, walkable floor, which flattens the wall to a plate
+          s = shapes.classes.shell
+        else
+          s = TileShape.at(map, shapes, tile, tx, ty)
+          if s and void and void[tile] and not s.authored then
+            s = shapes.classes.void
+          end
         end
         shapeAt[k], tileAt[k] = s, tile
       end
@@ -226,6 +307,7 @@ function Structures.forMap(map)
   -- terrain.)
   S = { shapeAt = shapeAt, tileAt = tileAt, outdoor = Map.isOutdoor(def),
         hideBareRing = hullRingOnly or nil,
+        railFace = TileShape.railFace(tileset.id),
         runs = {}, skip = {}, ground = {}, doorFold = {}, objectQuads = {},
         grassQuads = {}, flowerQuads = {}, roundStamps = {}, figures = {} }
   Buildings.build(S, map, pixels(tileset), perRow)
@@ -298,6 +380,12 @@ function Structures.forMap(map)
 
   -- ---- stairs: profile-pinned cells that render as real steps ----
   Structures.buildStairs(S, map, x0, x1, y0, y1)
+
+  -- ---- falls: the drop between two river levels, measured off the art ----
+  Structures.buildFalls(S, map, x0, x1, y0, y1)
+
+  -- ---- rails: a fence seen END ON, built from the face-on drawing ----
+  Structures.buildRails(S, map, x0, x1, y0, y1)
 
   -- ---- bookcases: pinned shelves collapsed to one cell of depth ----
   -- The atlas comes along so the shelf front can carry its own measured
@@ -1298,10 +1386,18 @@ function Structures.buildCylinders(S, map, x0, x1, y0, y1, groundTiles)
   -- voxels the body band is repeated up to
   local stumpCap, canCap, canBase, canHeight, canWell, canTaper
     = 6, 9, 4, 9, 5, 4
+  -- a potted plant's crown is a flat spray of leaves; a TREE's crown is a
+  -- ball, and capping it to the spray depth is what makes one read as thin
+  local planterSpray = PLANTER_SPRAY
   do
     local okP, prof = pcall(V.data, "voxel_heights")
     local entry = okP and type(prof) == "table" and prof.tilesets
                   and prof.tilesets[map.tileset.id]
+    if entry and entry.planter_spray ~= nil then
+      local ps = entry.planter_spray
+      planterSpray = (type(ps) == "table" and (tonumber(ps.rows) or 0) > 0)
+                     and ps or nil
+    end
     if entry and type(entry.stump_cap) == "number" then
       stumpCap = entry.stump_cap
     end
@@ -1410,7 +1506,7 @@ function Structures.buildCylinders(S, map, x0, x1, y0, y1, groundTiles)
             if not tpl then
               local tq, tbg = roundTemplate(S, map, data, cx, cy,
                                             groundTiles, 16, nil, 32,
-                                            PLANTER_SPRAY)
+                                            planterSpray)
               tpl = { quads = tq, bg = tbg }
               roundCache[sig] = tpl
             end
@@ -2137,6 +2233,273 @@ function Structures.buildStairs(S, map, x0, x1, y0, y1)
   end
 end
 
+-- ---- falls: a river's DROP, measured, with the river above it raised ----
+--
+-- Gen 2 records no elevation whatever -- the pool at the top of Mt. Mortar's
+-- fall and the one at the bottom are both COLL_WATER, and the sheet between
+-- them is COLL_WATERFALL because that is the move you need, not because the
+-- engine knows there is a drop there.  So the only statement of how far the
+-- water falls is the ART: the map draws the fall four cells deep at Mt.
+-- Mortar and two at Tohjo Falls, and that IS the height.
+--
+-- Boxed at one flat number the whole thing read backwards: a kerb across a
+-- level river with the pool it pours OUT of sitting at the kerb's foot.
+-- Measured, the fall stands as tall as it is drawn, the river above it
+-- stands on its crest, and the rock either side comes up to hold it in.
+--
+-- The fall is the only thing measured.  Where the raised water goes is
+-- FOLLOWED, not guessed: flood the connected water from the crest and stop
+-- at the first thing that is not water, which is the bank.
+local FALL_MAX = 96        -- world px; six cells, past which a cave is a well
+local FALL_POOL_MAX = 4096 -- tiles; a runaway flood is a bug, not a lake
+local FALL_RIM = 2         -- tiles of bank raised with the water
+local GORGE_WALL = 32      -- world px; a cave wall beside a fall
+
+local function fallRun(h, north, front)
+  return { north = north, front = front, extent = front - north + 1,
+           unit = front - north + 1, h = h, peak = h, rise = 0,
+           roofRows = 0, fromRepeat = false, door = false }
+end
+
+function Structures.buildFalls(S, map, x0, x1, y0, y1)
+  local cols, any = {}, false
+  for ty = y0, y1 do
+    for tx = x0, x1 do
+      local s = S.shapeAt[keyOf(tx, ty)]
+      if s and s.class == "waterfall" then
+        cols[tx] = cols[tx] or {}
+        cols[tx][ty] = true
+        any = true
+      end
+    end
+  end
+  if not any then return end
+
+  -- measure each column's contiguous run: that is the drop
+  local crest, height = {}, 0
+  for tx, ys in pairs(cols) do
+    local sorted = {}
+    for ty in pairs(ys) do sorted[#sorted + 1] = ty end
+    table.sort(sorted)
+    local i = 1
+    while i <= #sorted do
+      local north, front = sorted[i], sorted[i]
+      while i + 1 <= #sorted and sorted[i + 1] == front + 1 do
+        i = i + 1
+        front = sorted[i]
+      end
+      i = i + 1
+      -- The drop CASCADES rather than standing as one block.  Taken whole
+      -- the fall is a 96px cube six cells deep -- a mesa of falling water
+      -- with the drop hidden at its south face -- because the map draws
+      -- the sheet across every cell it passes through.  Read row by row
+      -- instead it is what it is drawn as: a stair of water losing one
+      -- course a row, crest at the top, river level at the foot.
+      local extent = front - north + 1
+      local step = math.min(8, math.floor(FALL_MAX / extent))
+      for ty = north, front do
+        local h = (front - ty + 1) * step
+        S.runs[keyOf(tx, ty)] = fallRun(h, ty, ty)
+      end
+      local crestH = extent * step
+      if crestH > height then height = crestH end
+      crest[#crest + 1] = { tx, north - 1 }
+    end
+  end
+  if height <= 0 then return end
+
+  -- the river above stands on the crest
+  local function isWater(tx, ty)
+    local s = S.shapeAt[keyOf(tx, ty)]
+    return s ~= nil and s.class == "water"
+  end
+  local seen, queue = {}, {}
+  for _, c in ipairs(crest) do
+    local k = keyOf(c[1], c[2])
+    if not seen[k] and isWater(c[1], c[2]) then
+      seen[k] = true
+      queue[#queue + 1] = c
+    end
+  end
+  local raised = {}
+  while #queue > 0 and #raised < FALL_POOL_MAX do
+    Budget.tick()
+    local c = table.remove(queue)
+    raised[#raised + 1] = c
+    S.runs[keyOf(c[1], c[2])] = fallRun(height, c[2], c[2])
+    for _, d in ipairs(DIRS4) do
+      local nx, ny = c[1] + d[1], c[2] + d[2]
+      local nk = keyOf(nx, ny)
+      if nx >= x0 and nx <= x1 and ny >= y0 and ny <= y1
+         and not seen[nk] and isWater(nx, ny) then
+        seen[nk] = true
+        queue[#queue + 1] = { nx, ny }
+      end
+    end
+  end
+
+  -- and the bank comes up with it.  A raised lake ringed by 32px rock
+  -- pours out through its own banks from every angle but straight on.
+  local edge = raised
+  for _ = 1, FALL_RIM do
+    local next_ = {}
+    for _, c in ipairs(edge) do
+      for dy = -1, 1 do
+        for dx = -1, 1 do
+          local tx, ty = c[1] + dx, c[2] + dy
+          local k = keyOf(tx, ty)
+          local s = S.shapeAt[k]
+          if s and s.art == "upright" and s.class ~= "waterfall"
+             and not seen[k] then
+            seen[k] = true
+            local run = S.runs[k]
+            if not run or run.h < height then
+              S.runs[k] = fallRun(height, ty, ty)
+            end
+            next_[#next_ + 1] = { tx, ty }
+          end
+        end
+      end
+    end
+    edge = next_
+  end
+
+  -- ...and so does the CAVE.  Gen 2 draws a chamber wall and the band that
+  -- retains a raised floor out of the same rock, so `cliff` has to be short
+  -- enough for the plateau -- one course, or the deck stands clear of the
+  -- flight that climbs it.  In a chamber with a fall in it that reading is
+  -- wrong twice over: the walls ARE the gorge the river cut, and at a single
+  -- course they left a four-cell drop standing in an open field.  A fall on
+  -- the map is the one thing that tells the two apart, so here -- and only
+  -- here -- rock that is not holding a terrace up stands full height.
+  for ty = y0, y1 do
+    for tx = x0, x1 do
+      local k = keyOf(tx, ty)
+      local s = S.shapeAt[k]
+      if s and s.class == "cliff" and s.h < GORGE_WALL and not S.runs[k] then
+        local holds = false
+        for dy = -1, 1 do
+          for dx = -1, 1 do
+            local ns = S.shapeAt[keyOf(tx + dx, ty + dy)]
+            if ns and ns.class == "terrace" then holds = true end
+          end
+        end
+        if not holds then S.runs[k] = fallRun(GORGE_WALL, ty, ty) end
+      end
+    end
+  end
+end
+
+-- ---- rails: a fence seen END ON, built from the face-on drawing ----
+--
+-- A fence is drawn twice over.  The EAST-WEST run is the face-on view --
+-- pickets, balusters, daylight between them -- and the `post` pool stands
+-- that up as a thin slab in the middle of its cell.  The NORTH-SOUTH run is
+-- a different drawing entirely: the same fence seen along its length, one
+-- column repeated seamlessly, with nothing in it to see through.
+--
+-- Boxed from that drawing it fills its cell edge to edge and wears end grain
+-- on both flanks -- which is what Route 35's north-south line and the pen
+-- around Sprout Tower's stairwell were: a wall.  So the run is built from
+-- the OTHER projection instead.  A panel six pixels thick stands down the
+-- middle of the cells, as tall as the face-on drawing, wearing that drawing
+-- repeated along BOTH flanks -- so a first-person walk beside it sees the
+-- same fence the east-west run is, and from above the panel still wears its
+-- own top-down art.  Ends are capped from the middle of the same rows, so a
+-- run that stops in the open stops with a post rather than a hole.
+function Structures.buildRails(S, map, x0, x1, y0, y1)
+  local face = S.railFace
+  if not face then return end
+  local DEPTH = 6
+  local tileset = map.tileset
+  local perRow = tileset.tilesPerRow or 16
+  local atlasW = tileset.imageWidth or (perRow * 8)
+  local atlasH = tileset.imageHeight or 48
+  local quads = S.objectQuads
+  local railTop = #face * 8
+
+  local function isRail(tx, ty)
+    local s = S.shapeAt[keyOf(tx, ty)]
+    return s ~= nil and s.authored and s.class == "fence"
+  end
+
+  -- the floor the panel stands on: the nearest flat neighbour's art, since
+  -- the cell's own drawing is the fence and is standing up now
+  local function groundUnder(tx, ty)
+    for r = 1, 3 do
+      for _, d in ipairs(DIRS4) do
+        local nk = keyOf(tx + d[1] * r, ty + d[2] * r)
+        local ns = S.shapeAt[nk]
+        if ns and ns.flat and ns.class ~= "void" then return S.tileAt[nk] end
+      end
+    end
+    return nil
+  end
+
+  local function uv(tile, px0, px1)
+    local ax = (tile % perRow) * 8
+    local ay = math.floor(tile / perRow) * 8
+    return (ax + px0 + 0.02) / atlasW, (ax + px1 - 0.02) / atlasW,
+           (ay + 0.02) / atlasH, (ay + 8 - 0.02) / atlasH
+  end
+  local function quad(c, u0, u1, v0, v1, shade)
+    quads[#quads + 1] = { c[1], c[2], c[3], c[4], shade = shade,
+                          uv = { { u0, v1 }, { u1, v1 },
+                                 { u1, v0 }, { u0, v0 } } }
+  end
+
+  for ty = y0, y1 do
+    local tx = x0
+    while tx <= x1 do
+      if not isRail(tx, ty) then
+        tx = tx + 1
+      else
+        Budget.tick()
+        local txb = tx
+        while txb < x1 and isRail(txb + 1, ty) do txb = txb + 1 end
+        local xa = (tx * 8 + (txb + 1) * 8 - DEPTH) / 2
+        local xb = xa + DEPTH
+        local za, zb = ty * 8, ty * 8 + 8
+        local capN, capS = not isRail(tx, ty - 1), not isRail(tx, ty + 1)
+        for i = 1, #face do
+          local ya = (#face - i) * 8
+          local yb = ya + 8
+          local u0, u1, v0, v1 = uv(face[i], 0, 8)
+          quad({ { xa, ya, za }, { xa, ya, zb },
+                 { xa, yb, zb }, { xa, yb, za } }, u0, u1, v0, v1, 0.72)
+          quad({ { xb, ya, zb }, { xb, ya, za },
+                 { xb, yb, za }, { xb, yb, zb } }, u0, u1, v0, v1, 0.84)
+          local e0, e1 = uv(face[i], 1, 7)
+          if capS then
+            quad({ { xa, ya, zb }, { xb, ya, zb },
+                   { xb, yb, zb }, { xa, yb, zb } }, e0, e1, v0, v1, 0.90)
+          end
+          if capN then
+            quad({ { xb, ya, za }, { xa, ya, za },
+                   { xa, yb, za }, { xb, yb, za } }, e0, e1, v0, v1, 0.68)
+          end
+        end
+        for t = tx, txb do
+          local px0 = math.max(0, math.min(8, xa - t * 8))
+          local px1 = math.max(0, math.min(8, xb - t * 8))
+          if px1 > px0 then
+            local u0, u1, v0, v1 = uv(S.tileAt[keyOf(t, ty)], px0, px1)
+            quads[#quads + 1] = {
+              { t * 8 + px0, railTop, za }, { t * 8 + px1, railTop, za },
+              { t * 8 + px1, railTop, zb }, { t * 8 + px0, railTop, zb },
+              shade = 1,
+              uv = { { u0, v0 }, { u1, v0 }, { u1, v1 }, { u0, v1 } } }
+          end
+          local k = keyOf(t, ty)
+          S.skip[k] = true
+          if S.ground[k] == nil then S.ground[k] = groundUnder(t, ty) end
+        end
+        tx = txb + 1
+      end
+    end
+  end
+end
+
 -- ---- volume mode: per-column runs with real drawn heights ----
 
 -- `tiles` is a list of {tx, ty} forming one region (or what is left of one
@@ -2407,7 +2770,7 @@ function Structures.extractObjects(S, map, region, data, perRow, force)
     -- per tileset, because the answer is per drawing: the healing consoles'
     -- screens really do stand on a dark wall band and really do need dark
     -- voted out, and the PC really does need light kept.
-    local bg = {}
+    local bg, named_ = {}, false
     do
       local named = TileShape.propBg(map.tileset.id)
       if named then
@@ -2415,12 +2778,16 @@ function Structures.extractObjects(S, map, region, data, perRow, force)
           local rule = named[S.tileAt[keyOf(c[1], c[2])]]
           if rule then
             for shadeName in pairs(rule) do bg[shadeName] = true end
+            named_ = true
             break
           end
         end
       end
+      -- `none` is the whole answer: the drawing has no background, so
+      -- nothing floods and the pin voxelizes entire.
+      if bg.none then bg = {} end
     end
-    if not next(bg) then
+    if not named_ then
       for iy = 0, H - 1 do
         for ix = 0, W - 1 do
           local px, py = ix - 1, iy - 1
@@ -2766,20 +3133,43 @@ function Structures.buildObject(S, map, region, cluster,
         local x, y = wx0 + lx, baseY + c.lowY - ly
         local u = (srcU[i] + 0.5) / atlasW
         local v = (srcV[i] + 0.5) / atlasH
-        local function quad(c1, c2, c3, c4, shade)
-          quads[#quads + 1] = { c1, c2, c3, c4, u = u, v = v, shade = shade }
+        local function quad(c1, c2, c3, c4, shade, qu, qv)
+          quads[#quads + 1] = { c1, c2, c3, c4, u = qu or u, v = qv or v,
+                                shade = shade }
+        end
+        -- A cap wears the colour of the BODY it closes rather than of the
+        -- pixel it is cut from.  Sprite art rings every object in black,
+        -- so extruding each pixel faithfully lids a gilded statue with a
+        -- black plate and floors it with another.  Where the capped pixel
+        -- IS that outline, walk inward for the first pixel that is not,
+        -- and take its colour: the top of a gold statue comes out gold.
+        -- Only the shade-segmented pools know their outline (`opaque` and
+        -- the detector classify by opacity), so elsewhere this is inert.
+        local function capUV(dy)
+          if state[i] ~= "black" then return nil end
+          local ny = ly + dy
+          for _ = 1, 8 do
+            local ni = at(lx, ny)
+            if not ni or comp[ny * bw + lx] ~= c then return nil end
+            if state[ni] ~= "black" then
+              return (srcU[ni] + 0.5) / atlasW, (srcV[ni] + 0.5) / atlasH
+            end
+            ny = ny + dy
+          end
         end
         quad({ x, y, z1 }, { x + 1, y, z1 }, { x + 1, y + 1, z1 },
              { x, y + 1, z1 }, OBJ_SHADE.front)
         quad({ x + 1, y, z0 }, { x, y, z0 }, { x, y + 1, z0 },
              { x + 1, y + 1, z0 }, OBJ_SHADE.back)
         if not at(lx, ly - 1) then
+          local cu, cv = capUV(1)
           quad({ x, y + 1, z0 }, { x + 1, y + 1, z0 }, { x + 1, y + 1, z1 },
-               { x, y + 1, z1 }, OBJ_SHADE.top)
+               { x, y + 1, z1 }, OBJ_SHADE.top, cu, cv)
         end
         if y > baseY and not at(lx, ly + 1) then
+          local cu, cv = capUV(-1)
           quad({ x, y, z1 }, { x + 1, y, z1 }, { x + 1, y, z0 },
-               { x, y, z0 }, OBJ_SHADE.bottom)
+               { x, y, z0 }, OBJ_SHADE.bottom, cu, cv)
         end
         if not at(lx - 1, ly) then
           quad({ x, y, z0 }, { x, y, z1 }, { x, y + 1, z1 },
@@ -3289,6 +3679,83 @@ end
 
 -- ---- tall grass ----
 
+-- ---- closing a standee's sides ----
+--
+-- The grass tufts and the flowers are both built the same way: each row of
+-- the 8x8 drawing becomes a horizontal RUN of lit pixels, stood up as a
+-- front face and a back face one voxel apart, with a lid on top. What that
+-- leaves open is the two ENDS of every run -- so the slab was a pair of
+-- billboards rather than a solid, and from any angle off square you looked
+-- in through the edge and straight out the other side. At the low cameras
+-- this mod has grown (1ST, 3RD, the battle's floor-level seat) that is
+-- most of the time.
+--
+-- A wall goes on an end only where the pixel beyond it is actually clear,
+-- which for a run's end it is by construction -- except where two runs on
+-- the same row meet across a gap of nothing, which cannot happen, and at
+-- the tile's border, where the neighbouring tile's own standee may or may
+-- not continue the shape. The border is closed anyway: tufts sit on their
+-- own half-cells with a gap between them, so an open border edge is a hole
+-- in the open, not a seam with anything.
+--
+-- Each wall samples ONE texel at its centre -- the end pixel it is closing
+-- off -- so it wears that pixel's own colour, which is the nearest coloured
+-- pixel to the surface being filled. Sampling a single texel is also what
+-- carries the animation: when a frame keys that pixel out, the wall's own
+-- fragments discard with the faces either side of it, so a swaying tuft
+-- never leaves a wall standing where its blade no longer is.
+-- `everyPixel` is for a standee whose silhouette ANIMATES. The mesh is
+-- built once, over the UNION of every frame's mask, and each frame is cut
+-- out again in texture space -- so a run that is six pixels wide in the
+-- union may be two pixels wide in the frame on screen, and the four pixels
+-- that dropped out took the union's end walls with them. What is left
+-- exposed is an interior boundary, which had no wall because in the union
+-- it was not a boundary at all. That is the gap that survived closing the
+-- run ends: the first frame looked solid and every other frame did not.
+--
+-- So an animated standee gets a wall on BOTH sides of EVERY pixel. A wall
+-- between two lit pixels is enclosed by the front and back faces and never
+-- seen; the moment its neighbour is keyed out it becomes the edge, already
+-- in place and already wearing the right colour. Each is inset a hair into
+-- its own pixel so the two that meet at a boundary are not coplanar -- the
+-- voxel pass draws with culling off, and two quads in the same plane would
+-- z-fight rather than politely take turns.
+local SIDE_INSET = 0.03
+
+local function sideQuads(quads, ix, ix2, yBot, yTop, zB, zF,
+                         ax0, ay0, atlasW, atlasH, py, lit, everyPixel)
+  local function texel(px)
+    return (ax0 + px + 0.5) / atlasW, (ay0 + py + 0.5) / atlasH
+  end
+  local function left(px, at)
+    local u, v = texel(px)
+    quads[#quads + 1] = {                 -- facing -X
+      { at, yBot, zB }, { at, yBot, zF },
+      { at, yTop, zF }, { at, yTop, zB },
+      uv = { { u, v }, { u, v }, { u, v }, { u, v } },
+      shade = OBJ_SHADE.side,
+    }
+  end
+  local function right(px, at)
+    local u, v = texel(px)
+    quads[#quads + 1] = {                 -- facing +X
+      { at, yBot, zF }, { at, yBot, zB },
+      { at, yTop, zB }, { at, yTop, zF },
+      uv = { { u, v }, { u, v }, { u, v }, { u, v } },
+      shade = OBJ_SHADE.side,
+    }
+  end
+  if everyPixel then
+    for px = ix, ix2 do
+      left(px, px + SIDE_INSET)
+      right(px, px + 1 - SIDE_INSET)
+    end
+    return
+  end
+  if not lit(ix - 1, py) then left(ix, ix) end
+  if not lit(ix2 + 1, py) then right(ix2, ix2 + 1) end
+end
+
 -- A tall-grass CELL is four tufts: 2x2 tiles, and each 8x8 tile is one
 -- whole clump of grass. Each tile stands as its own thin per-pixel slab
 -- at ITS OWN depth -- the cell's north tile row in the north half of the
@@ -3359,6 +3826,20 @@ local function grassTemplate(map, data, tileId)
             shade = 1,
           }
         end
+        -- and underneath, where a blade ends in mid-air over the ground
+        if not opaque(ix, iy + 1) then
+          quads[#quads + 1] = {
+            { ix, yBot, zF }, { ix2 + 1, yBot, zF },
+            { ix2 + 1, yBot, zB }, { ix, yBot, zB },
+            uv = { { u0, v1 }, { u1, v1 }, { u1, v1 }, { u0, v1 } },
+            shade = OBJ_SHADE.bottom,
+          }
+        end
+        -- and the run's two end walls, which is what makes a blade a solid
+        -- thing rather than two billboards you can see between (sideQuads
+        -- above argues it, and why each wall wears its end pixel's colour)
+        sideQuads(quads, ix, ix2, yBot, yTop, zB, zF,
+                  ax0, ay0, atlasW, atlasH, iy, opaque)
         ix = ix2 + 1
       else
         ix = ix + 1
@@ -3526,17 +4007,51 @@ local function flowerTemplate(map, data, tileId)
           uv = { { u1, v1 }, { u0, v1 }, { u0, v0 }, { u1, v0 } },
           shade = OBJ_SHADE.back,
         }
-        -- petal tips: a top strip where the row above is clear. The
-        -- strip samples its own row's texel, so a tip that is not in
-        -- the current frame discards with the face beneath it
-        if not on(ix, py - 1) then
-          quads[#quads + 1] = {
-            { ix, yTop, zB }, { ix2 + 1, yTop, zB },
-            { ix2 + 1, yTop, zF }, { ix, yTop, zF },
-            uv = { { u0, v0 }, { u1, v0 }, { u1, v0 }, { u0, v0 } },
+        -- ------- the shell, closed on all four remaining faces
+        --
+        -- A flower SWAYS: the geometry spans the union of every animation
+        -- frame's mask and each frame is cut back out of it in texture
+        -- space (see the header). So "is there a pixel next door" has two
+        -- different answers -- one in the union this mesh was built from,
+        -- and one in the frame actually on screen -- and only the second
+        -- decides what is exposed.
+        --
+        -- Closing the union's own edges is therefore not enough, and was
+        -- the bug the first cut of this shipped: the base frame looked
+        -- solid and every other frame still had gaps, because a pixel that
+        -- drops out of a frame takes the union's wall with it and leaves an
+        -- interior boundary that never had one.
+        --
+        -- So every pixel gets a cap on all four of its remaining faces,
+        -- whatever its neighbours do. A cap between two lit pixels sits
+        -- inside the slab, enclosed by the front and back faces, and is
+        -- never seen; the moment its neighbour is keyed out it IS the edge,
+        -- already there and already wearing the right colour. Each samples
+        -- its own pixel's texel, so it appears and vanishes with the pixel
+        -- it belongs to rather than with the one it is closing off.
+        --
+        -- Inset a hair into its own pixel, because the voxel pass draws
+        -- with culling off: the two caps that meet at a boundary would be
+        -- coplanar and z-fight rather than politely take turns.
+        for px = ix, ix2 do
+          local tu = (ax0 + px + 0.5) / atlasW
+          local tv = (ay0 + py + 0.5) / atlasH
+          local xa, xb = px, px + 1
+          local yT = yTop - SIDE_INSET
+          local yB = yBot + SIDE_INSET
+          quads[#quads + 1] = {           -- the pixel's own lid
+            { xa, yT, zB }, { xb, yT, zB }, { xb, yT, zF }, { xa, yT, zF },
+            uv = { { tu, tv }, { tu, tv }, { tu, tv }, { tu, tv } },
             shade = OBJ_SHADE.top,
           }
+          quads[#quads + 1] = {           -- and its floor
+            { xa, yB, zF }, { xb, yB, zF }, { xb, yB, zB }, { xa, yB, zB },
+            uv = { { tu, tv }, { tu, tv }, { tu, tv }, { tu, tv } },
+            shade = OBJ_SHADE.bottom,
+          }
         end
+        sideQuads(quads, ix, ix2, yBot, yTop, zB, zF,
+                  ax0, ay0, atlasW, atlasH, py, on, true)
         ix = ix2 + 1
       else
         ix = ix + 1

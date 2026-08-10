@@ -239,13 +239,58 @@ local function runGeometry(map, bodyOnly, masks, sink, waterSink)
   local atlasW = tileset.imageWidth or (perRow * 8)
   local atlasH = tileset.imageHeight or 48
 
+  -- ------------------------------------------------------------- ledge lips
+  --
+  -- A hop-down ledge is a LIP, not a kerb.  TileShape resolves the class per
+  -- CELL (its HOP_LIP rule), but the drop is only DRAWN across the 8px tile
+  -- row the rim occupies -- the rest of the cell is the turf above it.  Read
+  -- at cell granularity the whole square rose, so a ledge line came out as a
+  -- kerb of grass with a rim printed on its side.
+  --
+  -- Which half rises is the ROM's own answer: DoPlayerMovement.TryJump keys
+  -- the hop off classes $A0-$AF, and the class sits on the cell you jump
+  -- FROM, so the neighbour holding it names the side the lip faces.
+  local LEDGE_HOP = {
+    { -1, 0, { [0xA0] = true, [0xA4] = true }, "right" },
+    { 1, 0, { [0xA1] = true, [0xA5] = true }, "left" },
+    { 0, -1, { [0xA3] = true, [0xA4] = true, [0xA5] = true }, "down" },
+  }
+
+  local ledgeDropCache = {}
+  local function ledgeDrop(cx, cy)
+    local k = keyOf(cx, cy)
+    local hit = ledgeDropCache[k]
+    if hit then return hit end
+    local d = "down"
+    if map.cellTile then
+      for _, r in ipairs(LEDGE_HOP) do
+        local ok, class = pcall(map.cellTile, map, cx + r[1], cy + r[2])
+        if ok and class and r[3][class] then d = r[4]; break end
+      end
+    end
+    ledgeDropCache[k] = d
+    return d
+  end
+
+  -- s.h for the tile the rim is drawn on, 0 for the rest of its cell
+  local function shapeHeight(tx, ty, s)
+    if s.class ~= "ledge" then return s.h end
+    local d = ledgeDrop(math.floor(tx / 2), math.floor(ty / 2))
+    local onDrop
+    if d == "up" then onDrop = ty % 2 == 0
+    elseif d == "right" then onDrop = tx % 2 == 1
+    elseif d == "left" then onDrop = tx % 2 == 0
+    else onDrop = ty % 2 == 1 end
+    return onDrop and s.h or 0
+  end
+
   local function heightAt(tx, ty)
     local k = keyOf(tx, ty)
     if S.skip[k] then return 0 end
     local run = S.runs[k]
     if run then return run.h end
     local s = S.shapeAt[k]
-    return s and s.h or 0
+    return s and shapeHeight(tx, ty, s) or 0
   end
 
   -- one atlas-rect UV, optionally cropped to art rows [vTop, vBot] of 8
@@ -486,7 +531,7 @@ local function runGeometry(map, bodyOnly, masks, sink, waterSink)
         end
       elseif s then
         local run = S.runs[k]
-        local h = run and run.h or s.h
+        local h = run and run.h or shapeHeight(tx, ty, s)
         local x0, z0 = tx * 8, ty * 8
 
         -- top face. A roofed volume gets a GABLE segment: the roof rises

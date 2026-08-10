@@ -290,12 +290,20 @@ end
 -- surface; in the flat fallback it is the screen, where white is white.
 local INK = 0.35   -- luminance at or under which a pixel counts as ink
 
+-- ...but only where the pixel is NEUTRAL. The HP bar's fill is the 1/3 gray
+-- shade multiplied by its bar colour, which lands well under INK -- a dark
+-- green, a dark red -- so luminance alone whitened the bar along with the
+-- glyphs. The ink the HUD draws has no hue at all, so chroma separates them.
+local CHROMA = 0.12
+
 local FLIP = [[
   uniform float ink;
+  uniform float chroma;
   vec4 effect(vec4 color, Image tex, vec2 tc, vec2 sc) {
     vec4 p = Texel(tex, tc);
     float luma = dot(p.rgb, vec3(0.299, 0.587, 0.114));
-    if (p.a > 0.0 && luma <= ink * p.a) p.rgb = vec3(p.a);
+    float sat = max(max(p.r, p.g), p.b) - min(min(p.r, p.g), p.b);
+    if (p.a > 0.0 && luma <= ink * p.a && sat <= chroma * p.a) p.rgb = vec3(p.a);
     return p * color;
   }
 ]]
@@ -345,6 +353,7 @@ function BattleHud.flipGlyphs(w, h, fn)
 
   love.graphics.setShader(sh)
   pcall(sh.send, sh, "ink", INK)
+  pcall(sh.send, sh, "chroma", CHROMA)
   love.graphics.setColor(1, 1, 1, 1)
   love.graphics.draw(layer, 0, 0)
   love.graphics.setShader()

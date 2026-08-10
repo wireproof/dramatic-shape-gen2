@@ -1,5 +1,536 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **Nothing indoors had a shape.** Not one of Generation 2's twenty-odd
+  interior tilesets carried a pin of any kind, so every room in the game
+  came out of the fallback as a field of identical 16px cubes: a Centre's
+  healing machine, its PC, a Mart's stock shelves, the bed you wake up in
+  and the stool you sit on were all the same grey box in the same place,
+  each wearing its own drawing in relief. Most of it is answered in one
+  table, because the ROM itself says what this furniture is:
+  `CheckFacingTileForStdScript` walks a straight collision-class to
+  std-script map at `04:$7A43`, and it reads `$91` bookshelf, `$93` PC,
+  `$94` radio, `$95` town map, `$96` Mart shelf, `$97` TV, `$9D` window,
+  `$9F` incense burner. Six rows in the shared collision table now reach
+  every interior in the game at once. The town map and the window are
+  deliberately left alone -- they are painted *on* the wall band rather
+  than standing in front of it, and giving either its own depth punches
+  the wall open behind. What the ROM does not name is pinned per tileset,
+  because it is all plain `$07`, the same class as the wall behind it:
+  Pokemon Centre, Mart, player's house, bedroom, and Elm's lab.
+
+- **The computers wore their own screens twice.** A box's front face comes
+  from the drawing's bottom row and its lid REPEATS the north row, which
+  on a terminal means the monitor is printed once facing you and once
+  lying flat on top of the machine. Every PC, television and radio is now
+  `console` -- the per-pixel standee the class was written for -- so the
+  screen appears once, facing out, and the cabinet keeps the silhouette it
+  is drawn with instead of being squared off.
+
+- **Kanto had no buildings.** Johto shipped with ten building templates and
+  Kanto with none, so every house, lab, Gym, Mart and Centre west of Tohjo
+  Falls fell to the volume path, and fell to it exactly the way Johto's did
+  before its list was written. Kanto repeats its wall course (`$4B` under
+  `$4B`, `$1A` under `$1A`), the detector's trim-foot rule reads a repeat, a
+  repeat never roofs, and a six-row drawing came out as a 16px flat-lidded
+  box with the roof printed on its lid. Seven templates now cover the
+  catalogue: Oak's lab and the Centre share one 6x4 slate roof, the Gym has
+  its own deeper tiled pitch, the Mart is that same slate over a 4x4
+  footprint, and the ordinary house comes in a three-cell version and two
+  two-cell cottages that differ only in whether the face you see carries
+  the door or a window. They are listed largest first, because placement is
+  first-claim-wins and a cottage placed early will happily claim a Mart's
+  facade and leave its roof behind.
+
+- **Kanto's fences were a wall of barrels.** The rail that pens Pallet's
+  yards and lines the ridge above Viridian (`$0E` over `$55`) and the
+  signposts beside every door (`$46`/`$47` over `$56`/`$57`) are both plain
+  class `$07`, so both stood as solid 16px cubes. The signs are now the
+  thin per-pixel plates the `signpost` class exists for, and the fence
+  takes `post` rather than `fence` -- the fence class is a BOX, which turns
+  a run into one continuous fence-textured kerb, while the post pool stands
+  each cell alone in its own depth band so a run comes out as separate
+  pickets with daylight between them.
+
+- **Kanto's flowerbeds were painted on.** `$03` -- the blossoms scattered
+  through the turf of every Kanto town -- was missing from the pin list,
+  which named only the denser `$04` bed. Every one of them was flat ground
+  while Johto's, which is the same tile id, stood up and swayed.
+
+- **Sprout Tower had no spine.** The great square beam through the middle
+  of each floor was a waist-high box like everything else; it is the
+  tower's structure and now runs to twice a wall's height, out of the top
+  of the frame. The columns flanking it stand as tall, which needed a new
+  class -- `column`, a post at 32px -- because `post` is waist-high
+  everywhere else in the game and a fence is not a pillar. The east-west
+  railing across the front is the one thing here that really is waist
+  high; it had never been pinned at all, so it fell to the wall fallback
+  and stood as the long slab it resembled.
+
+- **The statues were black.** Two separate causes, and the first is
+  general: a cap now wears the colour of the BODY it closes rather than of
+  the pixel it is cut from. Sprite art rings every object in black, so
+  extruding each pixel faithfully lids a gilded statue with a black plate
+  and floors it with another. Where the capped pixel is that outline the
+  builder walks inward for the first pixel that is not, and takes its
+  colour. The second cause is Sprout Tower's and Violet Gym's: their
+  statues are gilded in the same GB shades their floors are laid in, and
+  they fill their cells
+  edge to edge, so the rim vote that decides what is background read the
+  statue's own body and drained it -- leaving the black outline standing as
+  a charred shell. `prop_bg` could only ever name which shades ARE
+  background, which is no help when none of them is; it now takes `none`,
+  and the statues voxelize entire.
+
+- **The statues were boxes wearing their own faces twice.** Sprout Tower's
+  gilded Bellsprouts, the Johto gyms' badge statues and the pillars in the
+  Unown chambers were all collapsed onto a `bookcase`, which is a box at
+  full height -- and a box lids itself by repeating its north row, so every
+  one of them carried a second copy of its own carved face lying flat
+  across the top of its head. They are standees now, cut per pixel, and
+  keep the shape they are drawn with. Sprout Tower's galleries take `post`
+  for the same reason the outdoor fences do: the balustrade was one
+  continuous 16px kerb, and it is a march of separate uprights.
+
+- **The bedroom's machines were standing in each other.** Three of them
+  share one desk -- the computer, the stereo and the television -- and a
+  standee pool clusters whatever touches it, so all three in `console`
+  merged into a single drawing, whereupon that class's one-object contract
+  kept the largest and threw the other two away. Each has its own pool now.
+  Two related traps, both of which cost a machine its shape: a tile left
+  out of a pin does not become scenery, it falls through to its cell's
+  collision class and builds a SECOND standee from the leftovers standing
+  inside the first -- so a pin must name every tile of the cell it claims.
+  And the television is drawn across two cell rows, the upper of which is a
+  WALL cell, so its screen stood inside the wall band while only the stand
+  came forward.
+
+- **Four more interiors have shapes.** The tower set (Sprout Tower, the
+  Burned Tower, the Tin Tower and the Ecruteak gym), the Johto gym set
+  (Violet, Azalea and Goldenrod, which the ROM files under
+  `TilesetEliteFourRoom`) and the Unown chambers. Their statues, braziers
+  and pillars are all drawn one cell of plot tall by two cell rows of art,
+  so all of them take `bookcase`, which is the class for height rather than
+  depth. Both the tower and gym sets also pad their maps out to full width
+  with a black NOTHING tile whose cells are class `$07` like anything
+  solid, so each of these rooms was ringed by a 16px black kerb -- a room
+  inside a box. That tile is now `void`, and they stand in the dark they
+  are drawn in.
+
+- **Nothing indoors had a shape.** Not one of Generation 2's twenty-odd
+  interior tilesets carried a pin of any kind, so every room in the game
+  came out of the fallback as a field of identical 16px cubes: a Centre's
+  healing machine, its PC, a Mart's stock shelves, the bed you wake up in
+  and the stool you sit on were the same grey box in the same place, each
+  wearing its own drawing in relief. Most of it is answered in one table.
+  The ROM itself says what this furniture is -- `CheckFacingTileForStdScript`
+  walks a straight collision-class to std-script map at `04:$7A43`, and it
+  reads `$91` bookshelf, `$93` PC, `$94` radio, `$95` town map, `$96` Mart
+  shelf, `$97` TV, `$9D` window, `$9F` incense burner -- so eight rows in
+  the shared collision table now reach every interior in the game at once.
+  A town map and a window are deliberately left alone: they are painted on
+  the wall band rather than standing in front of it, and giving either its
+  own depth punches the wall open behind. What the ROM does not name is
+  pinned per tileset, because it is all plain `$07` -- the same class as
+  the wall behind it. The Centre's healing machine and the Marts' shelves
+  are `bookcase`, which is the class for a drawing that is TALL rather than
+  deep: two cell rows of art collapsed onto one cell of plot at full
+  height, which is the difference between a machine and two crates stacked
+  front to back. Elm's benches and the kitchen table are `table`, his
+  machine bank and the bedroom desk are `desk`, the bed is a bed, and the
+  four stools around the dining table are `stool` -- those had the opposite
+  failure, since the game marks their cells walkable and they were flat
+  floor you strolled straight through.
+
+- **Kanto had no buildings.** Johto shipped with ten building templates and
+  Kanto with none, so every house, lab, Gym, Mart and Centre west of Tohjo
+  Falls fell to the volume path -- and fell to it exactly the way Johto's
+  did before its list was written. Kanto repeats its wall course (`$4B`
+  under `$4B`, `$1A` under `$1A`), the detector's trim-foot rule reads a
+  repeat, a repeat never roofs, and a six-row drawing came out as a 16px
+  flat-lidded box with the roof printed on its lid. Seven templates now
+  cover the catalogue: Oak's lab and the Centre share one 6x4 slate roof,
+  the Gym has its own deeper tiled pitch, the Mart is the same slate over a
+  4x4 footprint, and the ordinary house comes in a three-cell version and
+  two two-cell cottages that differ only in whether the face you see
+  carries the door or a window. They are listed largest first, because
+  placement is first-claim-wins and a cottage placed early will happily
+  claim a Mart's facade and leave its roof behind.
+
+- **Kanto's fences were a wall of barrels.** The rail that pens Pallet's
+  yards and lines the ridge above Viridian (`$0E` over `$55`) and the
+  signposts beside every door (`$46`/`$47` over `$56`/`$57`) are both plain
+  class `$07`, so both stood as solid 16px cubes -- a fence you could not
+  see the town through, and a signpost that was a crate. The fence is now
+  a 10px rail and the signs are the thin per-pixel plates the `signpost`
+  class exists for.
+
+- **Route 29's north gate is a building again.** It stands hard against the
+  top edge of the map, and the four roof rows of its drawing would fall on
+  cell rows `-2` and `-1` -- where there is no map, only the border block's
+  wall of trees. The art is clipped by the boundary, not continued on the
+  neighbour, so the eight-row `johto_block_plain` template it otherwise
+  matches tile for tile could never place, the facade fell through to the
+  volume path, and the gate folded into a wedge with its door painted flat
+  across the top. A `topRows` variant now supplies the missing roof from
+  the atlas instead of from the map, so the model is built from the whole
+  drawing while placement still matches only the four rows that exist. It
+  is last in the template list: those four rows are the bottom half of
+  every plain block in Johto, and placement is first-claim-wins, so the
+  ordinary buildings take their cells before this one is tried.
+
+- **Kanto is Kanto again.** Every map from Pallet Town to the Indigo
+  Plateau was being drawn with Johto's tile graphics: the engine remapped
+  `TilesetKanto` to `TilesetJohto` on load, on the belief that Kanto's
+  extracted block data was full of building walls. It is not. Kanto's
+  metatiles come out of the ROM clean -- 128 blocks, no tile index above
+  `$5F`, and the block that prompted the workaround is a uniform sheet of
+  tile `$4B`, which is Kanto's plain grass and not a wall at all. Read
+  through the wrong tileset, Kanto's own block data indexed Johto's art
+  and the result was the scrambled ground, brown boulder-blobs where the
+  trees belong and shredded buildings the report described. The remap is
+  gone.
+
+- **Johto's plateaus are raised.** Every terrace in the region -- the Ruins
+  of Alph's four courtyards, Route 32's east bank, the whole terraced climb
+  of Routes 45 and 46 -- was painted flat onto the grass at the same height
+  as the grass, with its own cliff face standing 16px out of the lawn
+  beside it, so the rim you walk along read as a texture rather than as
+  ground you had climbed onto. Generation 2 records no elevation anywhere:
+  a terrace top and the field below it are both collision `$00`, and the
+  cliff between them is `$07` like every other solid. The one place the
+  drop IS written down is the floor tile, and there it is clean -- `$3C` is
+  the dirt drawn only on top of a cliff, `$05`/`$06` the grass at its foot,
+  and `$2C` is `$3C` wearing its north lip, a shadow band under a sunlit
+  highlight. Both are now pinned to a new `terrace` class: one 16px course,
+  drawn on its top face like a ledge, so it lands flush with the cliff face
+  holding it up and `VoxelScene.groundAt` stands the player and every NPC
+  on it. The pin is per TILE and per TILESET on purpose -- the collision
+  class `$B2` also names doorsteps, and Ilex Forest and the National Park
+  reuse both tile ids for forest floor.
+
+- **The outdoors had no colour.** Every Generation 2 exterior meshed in raw
+  four-shade grey while interiors came out in full GBC colour, which is the
+  shape of the bug written out: the seven tilesets with animated water --
+  Johto, JohtoModern, Kanto, Forest, Park, Port, Tileset0 -- are exactly the
+  outdoor ones, and only an animated tileset builds the private, mutable
+  atlas copy that `animate` patches each step. That copy asks
+  `rendererPixels` what the engine's texture was made from, and the answer
+  fell through to the art on disk. True for a tileset nobody repainted;
+  false for Gen 2, whose per-tile CGB palettes (`palMap`/`palColors`) are
+  baked into the atlas by `TileRenderer.getGen2Atlas` under the `trueColor`
+  flag rather than `gbcAtlas`, with the pixels dropped once the texture
+  exists. So the animated path rebuilt from the greyscale source and threw
+  every palette away. It now re-bakes from `palMap`/`palColors` directly,
+  the way the RED++ branch beside it already re-bakes rather than reading
+  back -- reading the texture back mid-mesh-build takes a canvas and leaves
+  the terrain missing from the frame altogether.
+
+- **FULL no longer holds the sky at SYNC.** The preset took the DAYTIME row
+  off the options menu and pinned it to the wall clock, on the reasoning
+  that a preset owning the look should own the rows describing it. What that
+  meant in practice: start the game after dark and the whole outdoor world
+  is multiplied by `DayNight.TINTS.night`, a heavy blue-grey, with no row
+  anywhere to ask for daylight -- and COLORS cannot lift it, because the
+  tint is a uniform applied downstream of the palette. FULL now SETS
+  DAYTIME to SYNC on arrival and lets go of it, exactly as it already
+  treated 3D-BTL and BACK SPRITES. A preset that hides the one row deciding
+  whether you can see anything is a lock, not a preset.
+
+- **Sideways ledges are knee-high too.** A ledge you hop east or west over
+  is drawn with tiles `$3B` and `$3D`, and those are also the cliff posts
+  Route 45 is mostly built from -- so a tile pin cannot tell the two apart,
+  and the side lips were left standing 16 tall against the south-facing
+  lip's 6, twice the height of the ledge right next to them. The lip is now
+  found from its *neighbour* instead: `DoPlayerMovement`'s hop classes sit
+  on the plain ground you jump **from**, `$A0` east over `$3D`, `$A1` west
+  over `$3B`, `$A3` south over `$4C`, with `$A4` and `$A5` the corners that
+  do two at once. Those classes are no longer pinned directly, either --
+  pinning them raised a one-cell rail of turf along the top of every
+  terrace, because the class is on the ground, not on the drop.
+
+- **Mountains have tops.** Generation 2 draws a rocky mass as a ring of
+  solid cells around cells that are still flagged walkable, because in two
+  dimensions nobody can ever stand inside one to find out. Read literally
+  that made the mesh a kerb with a pit in it: every peak on Routes 45 and
+  46 came out sunk to ground level, and with free movement on you could
+  step into one from the north and stand in the hole. The open cells are
+  now flooded inward from the map's edge, and anything the flood cannot
+  reach is filled — a pocket holding a warp is left alone, because that is
+  a walled yard with a door in it and not rock. Route 46 gains 126 filled
+  cells and Route 45 gains 276; New Bark Town and Ilex Forest gain none.
+
+- **Doorsteps are doorsteps, and ledges are knee-high again.** Three
+  readings corrected against the routines that actually test the classes:
+
+  **The pink mat in front of every route gate was a box.** Johto's `$40`,
+  Kanto's and the Park's `$4F` were read as fence pickets. They are not:
+  the cells they are drawn in carry classes `$70`, `$76` and `$7E`, and
+  `CheckWarpCollision` matches exactly those -- `$60`, `$68`, and any class
+  whose high nybble is `$7` -- so the tile is the entrance mat you step on
+  to go inside. Standing it up parked a crate across every gate in Johto.
+
+  **Ledges facing left and right stood chest high.** Only the downward lip
+  had a tile pin, so the sideways ones fell through to `wall` and were
+  drawn sixteen units tall -- a barrier the player then hopped straight
+  over. `DoPlayerMovement.TryJump` reads the hop direction out of the
+  class's low three bits, so every class with a high nybble of `$A` is a
+  ledge; the whole nybble is pinned now and all four directions are low.
+
+  **`$B2` was not a cave wall.** It was pinned up on the theory that it
+  sealed a hole in the mountain tops. It did not -- it is the doorstep
+  class, shared by cave mouths and building entrances, and folding it up
+  put a second box on every threshold. Reverted. The hole in a mountain
+  top is a terrain-elevation problem and is still open.
+
+- **Generation 2 water moves.** `RomExtractorGen2` wrote `animation = {}`
+  on every tileset, so `TileRenderer.defaultAnimatedTiles` matched nothing
+  and no water in Johto or Kanto ever rippled, in either renderer. Each
+  set's `Tileset<Id>Anim` script is now walked -- four bytes a row, a VRAM
+  destination and the routine that fills it, down to `DoneTileAnimation` --
+  and a row calling `AnimateWaterTile` declares `TILEANIM_WATER`. Seven
+  sets say so: Johto, JohtoModern, Kanto, Forest, Park, Port and the
+  unused Tileset0, and every one of them shifts tile `$14`.
+
+- **The scenery Generation 2 is made of stands up.** Six drawings the
+  tileset descriptions could not reach, each of them flattened or boxed
+  for the same reason -- the cell's collision class says one thing and the
+  art says another, and only the art knows which:
+
+  **Goldenrod and Azalea had no description at all.** Both are
+  `TilesetJohtoModern`, a set with no pins and no building templates, so
+  every house in the two biggest towns in Johto came out as a heap of
+  16px crates. It now carries Johto's pins plus five hand-measured
+  templates of its own -- the department store, the two hall blocks and
+  the two 2-bay street blocks. Azalea went from 91 claimed tiles to 932,
+  Goldenrod to 2024.
+
+  **Fences were solid.** The wooden rail's four tiles are drawn nowhere
+  else in Johto, Johto Modern, Kanto or the Park, and their cells'
+  classes disagree with each other, so nothing but a tile pin can name
+  them -- unnamed, they stood 16px, a picket fence as tall as the houses
+  behind it. Pinned `post` rather than `fence`, because a fence is the
+  one piece of scenery that is mostly holes: the post pool cuts it per
+  pixel and stands each cell alone in its own depth band, so a run reads
+  as separate panels with daylight between them.
+
+  **Flowerbeds were paint.** Johto's `$03` and Kanto's `$04` sit in
+  walkable cells, so the cell rules made them flat ground with flowers
+  printed on it. `flower` keeps that ground and stands the blooms on top
+  of it as a one-voxel cutout that sways with the tile animation.
+
+  **The Bug-Catching Contest was fought in a mown lawn.** National Park's
+  long grass carries collision class `$14`, which is plain land and is
+  not one of the ten classes `CheckGrassCollision` names, so unlike the
+  ordinary `$18` grass beside it the cell rules read it as turf. Its four
+  tiles are drawn in exactly one block, and pinned `grass` they are tufts
+  the player walks between.
+
+  **The forest's big trees were plateaus.** Ilex Forest's and the Park's
+  tree is one 4x4-tile mass -- two cells square -- with class `$07` in
+  every cell, and the volume path drew what that looks like from above: a
+  flat-topped green mesa with the canopy pattern on its lid. `canopy`
+  pins the drawing's top-left tile as the group anchor and carves the
+  whole 2x2 as one 32px hull, with the remaining fifteen tiles left
+  `cylinder` so a drawing cut by a map edge degrades to per-cell domes
+  rather than back to a box. The cut tree and Sudowoodo are map objects,
+  not tiles, and are untouched.
+
+  **Cave rocks were crates**, though they are drawn round -- one boulder
+  per cell, fifteen blocks of them, `$07` throughout. Cylinders now.
+
+  **And the top of every mountain had a hole in it.** The cave mouth is
+  class `$B2`, which is walkable -- you step into it to warp -- so the
+  cell rules resolved it to flat ground and punched a pit clean through
+  the rock face it is drawn in, one you could see into from above and
+  walk down. Exactly the `$71` door case, and it takes the same answer:
+  the mouth folds up into the rock with the rest of the drawing and reads
+  as the dark opening it is painted as.
+
+  National Park's pond went with it. Only the four cells in the middle of
+  it carry a water class; every cell of the shoreline is `$07`, because
+  the pond cannot be surfed, so the rim stood up as a ring of blue crates
+  around a flat pool.
+
+- **Generation 2 maps are rendered, rather than approximated.** The mode
+  worked on Gen 2 for the things it did not need the tileset to explain --
+  the border forest, the player, the NPCs -- and for everything else it
+  drew a flat floor with 16px boxes on it, in the wrong colours. Three
+  separate causes, all of them the same mistake in different places:
+  reading Gen 2's data as if it were Gen 1's.
+
+  **Colour.** Gen 1 pays for its terrain colour with a screen-space
+  shade-remap over rectangular zones, which means nothing once the ground
+  is geometry, so `TerrainAtlas` bakes the world palette into the atlas
+  itself instead. Gen 2 does not work that way at all: its tilesets carry
+  a CGB palette per tile graphic (`palMap` / `palColors`, straight off the
+  ROM), and the engine has already baked those into the atlas the renderer
+  hands over. The bake only skipped its own work for RED++ and for a mod's
+  own art, so it took that finished colour atlas, went back to the RAW
+  greyscale on disk, and repainted the whole of Johto in one four-shade
+  SGB ramp -- seven palettes thrown away, a route rendered in blue and
+  white beside a flat view that was correct.
+
+  **Solidity.** A tileset names its walkable and water tiles, and Gen 1
+  names them by TILE ID -- but Gen 2 names them by COLLISION CLASS, and
+  the two numberings overlap end to end. Read as tile ids, Johto's land
+  classes cover most of the atlas, so nearly every solid tile resolved to
+  flat ground and interiors came out as furniture standing on an open
+  plain with six walls between them. Those derived per-tile pins are now
+  Gen 1's alone; where a class table exists the cell rules are the whole
+  truth. (Same root cause, smaller blast radius: the tall-grass pin read
+  class `$14` as a tile id, and Johto draws WATER at tile `$14` -- every
+  water tile in Gen 2 was wearing standing grass tufts.)
+
+  **Meaning.** Gen 2 stores one collision class per 16x16 cell and the
+  classes are semantic -- the ROM itself distinguishes a tree from a wall,
+  a counter from a bookshelf. That reaches drawings no tile-id pin can:
+  Johto's lone tree and its tree WALL are cut from the same six tiles and
+  differ only in class. A new `collision` table in `voxel_heights.lua`
+  pins those classes once for all thirty Gen 2 tilesets, so lone and berry
+  trees take the round voxel hull, tall grass stands up as tufts, service
+  counters drop to their 8px height, and a building's doorway stops
+  resolving to walkable ground and punching a hole through the front of
+  the house. Deliberately short: every row is read off the routine that
+  consumes the class or confirmed against the metatile art, and the
+  classes whose meaning is only guessable from their distribution -- the
+  ledge family among them -- are left to the detector.
+
+  Johto also gets one tile pin: the fence (`$40`, `$4A`, `$59`, `$5A`,
+  drawn nowhere else in the set) was standing as tall as the houses
+  behind it.
+
+## 1.5.5
+
+### Added
+
+- **A third-person camera: the 3RD rung.** The VOXEL ladder's eighth rung
+  (`3` / SELECT walk onto it after 1ST, and it is on the OPTIONS row)
+  stands the camera on a boom behind the player's shoulder. It is the
+  first-person rig with one number added, so everything 1ST already did
+  it does: the look steers on a mouse, the right stick or a touch drag,
+  and the grid walk is replaced by continuous camera-relative movement --
+  push in any direction and you go there, at any angle, with collision,
+  warps, ledges, encounters and scripts still running through the
+  engine's own machinery.
+
+  The boom **collides**: it marches back through the terrain height field
+  and the map's own walkability, so backing into a wall walks the camera
+  in to your shoulders instead of through it, and rounding a corner eases
+  it back out rather than snapping. Squeezed all the way into the head it
+  simply draws as 1ST until you step clear. It also carries a small
+  over-the-shoulder rail offset, which fades out as the boom shortens.
+
+  Every sprite in the world **turns to face it** -- yours, the NPCs', the
+  figures drawn into the furniture -- and shows the frame it would look
+  like from where the camera actually stands, so walking behind someone
+  shows you their back. Your own character is drawn (with the
+  through-the-wall silhouette 1ST had no use for) and **turns to face
+  where they are walking** rather than where the camera looks, so a strafe
+  reads as one; standing still they come back round to the camera's
+  bearing, which is the one A talks along.
+
+  Your card's frame is chosen from your body's **continuous** bearing
+  rather than from the compass direction the grid game stores. An NPC's
+  facing really is one of four directions, but yours is the angle the
+  camera itself is hung off, and quantising it before measuring it against
+  the eye leaves no margin for the shoulder rail's few degrees of offset:
+  in a band just short of each 45-degree boundary the pair read as 135
+  degrees apart and picked the mirrored PROFILE frame. Standing still.
+  Spinning the camera swept four of those bands a revolution, which showed
+  up as the character flicking sideways for a split second.
+
+  In VR the boom is declined outright and 3RD presents as 1ST does: a
+  headset that seats its wearer three cells behind their own body is a
+  well-known way to make people ill. The rung still changes the walk and
+  the sprites the same way.
+
+- **Every camera zooms, on whatever the machine has.** The mouse wheel,
+  `Q`/`E`, a two-finger pinch and the pad's two stick clicks all reach
+  whichever camera is actually in front of you -- the third-person boom,
+  the staged battle's lens, or the engine's own survey zoom on an orbit
+  rung. One module (`lib/CamControl.lua`) answers "which camera is this
+  aimed at" so the four cameras never race each other for an event, and
+  forwards everything it does not claim. 1ST claims nothing: the eye is in
+  the player's head, and a pinch there would only wind the survey zoom for
+  whenever they stepped back out.
+
+- **The battle camera is yours to steer.** The right stick, a drag across
+  the screen or the mouse walks the staged shot around the arena and raises
+  the seat; the wheel, `Q`/`E`, a pinch or a stick click work the lens.
+
+  Both axes stop where the composition does. LEFT stops at the shot the rig
+  was solved for, because there is nothing to the left of it. RIGHT ends
+  SIDE-ON -- the eye square to the arena's axis, both Pokemon at the same
+  distance instead of one behind the other -- computed from each rig's own
+  stance rather than written down. DOWN stops at the rig's low stance and
+  UP is 45 degrees above it, raised about the focus at a constant radius so
+  climbing never doubles as zooming. Input accumulates into a goal the eye
+  eases after, so a flick reads as the camera being pushed rather than
+  dragged.
+
+  The lens **opens by exactly the amount the pair spreads**: the solved
+  shot looks along the arena's axis at a shallow angle, which foreshortens
+  the gap between the two mons to less than half its length, and swinging
+  round or climbing un-foreshortens it. Left alone that threw both Pokemon
+  off the edges of the frame at the far end of either range, which made the
+  whole far end unusable.
+
+  Where you leave the camera is where the next battle opens. An angle and a
+  lens you chose are how you want to watch battles, not a fact about one
+  encounter.
+
+- **Move animations track the camera.** They already slid to follow the
+  pair's midpoint; now they follow its SEPARATION too. Both mons are
+  geometry standing on the map, so the camera sizes them -- and an effects
+  layer that kept the authored 106-pixel spacing through a zoom and a
+  60-degree swing fired its beams into the air beside the Pokemon they were
+  aimed at.
+
+- **BACK SPRITES locks the battle camera.** That setting pins your own mon
+  to the GB's slot on the menu while the foe stands out on the map, and no
+  angle holds a composition that is half frame and half world. The steer,
+  the climb and the lens all stand down -- in the rig as well as at the
+  inputs, so an angle stored from before the row was switched on cannot
+  leave it steered anyway. The slow drift stays: it was always there under
+  BACK SPRITES and two degrees is not a composition problem.
+
+- **BATTLE BG is pinned to WHITE and its row comes off the menu.** The row
+  picks what fills the screen AROUND the battle, and this mode fills the
+  window with the map the fight is standing on -- there are no voids left
+  for it to be about. WORLD was actively wrong under it: it makes the
+  battle non-opaque so the engine draws a second, dimmed copy of the
+  overworld beneath the arena pass's own. Pinned rather than merely hidden,
+  so a save written before the mod was installed cannot carry a value the
+  menu can no longer reach. Uninstall and the row is back.
+
+### Fixed
+
+- **Grass and flowers are closed off at the sides.** Both stand as
+  per-pixel slabs built from runs of lit pixels, and only the front, the
+  back and a lid were ever emitted -- so from any angle off square you
+  looked straight in through the open end of every run and out the far
+  side. At the low cameras this release adds, that is most of the time.
+  Each run now wears end walls in the colour of the pixel they close off.
+
+  Flowers needed more than that, because a flower SWAYS: the mesh spans the
+  union of every animation frame and each frame is cut back out in texture
+  space, so a pixel that drops out of a frame takes the union's wall with
+  it and leaves an interior boundary that never had one. The first cut of
+  this looked solid on the base frame and still had gaps on every other.
+  Every pixel of a flower now carries a cap on all four of its remaining
+  faces: enclosed and invisible while its neighbour is there, and already
+  in place the moment the animation takes that neighbour away.
+
+- **No more machine-gun bonking in 1ST and 3RD.** The grid walk's collision
+  sound marks a discrete event -- a direction pressed, a step refused. A
+  free walk has no such moment: the body slides along every wall it grazes,
+  continuously, so a corridor taken at a slight angle rang the bonk twice a
+  second from end to end. The wall stopping you is the feedback.
+
 ## 1.5.2
 
 ### Added
