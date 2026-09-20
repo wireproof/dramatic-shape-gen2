@@ -1317,17 +1317,8 @@ do
     end
     OverworldState.dramaticShapeSelectHook = true
   end
-  if GameVersion.generation and GameVersion.generation() == 2 then
-    mod.hooks:wrap("input.gamepad", function(next, game, event)
-      if event and event.phase == "pressed"
-          and (event.button == "back" or event.button == "select")
-          and not registeredItemOwnsSelect(game)
-          and cycleVoxel(game) then
-        return
-      end
-      return next(game, event)
-    end, 1000)
-  end
+  -- Gen II SELECT is routed by Game2 itself. Keeping a second mod hook here
+  -- would cycle twice on controllers and land back on the previous rung.
 end
 
 -- ------- the konami code, and everything it turns on

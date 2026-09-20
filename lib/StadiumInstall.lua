@@ -119,7 +119,11 @@ function StadiumInstall.romPath()
 end
 
 function StadiumInstall.romPresent()
-  return StadiumInstall.romPath() ~= nil
+  if StadiumInstall.romPath() ~= nil then return true end
+  local mod = V.mod
+  if not (mod and mod.read) then return false end
+  local ok, bytes = pcall(mod.read, mod, NAMED[1])
+  return ok and type(bytes) == "string" and #bytes > 0
 end
 
 -- Where to tell the player to put it. The save directory is the answer that
@@ -279,7 +283,15 @@ function StadiumInstall.begin()
   local f = fs()
   if not f then return false, "no filesystem" end
   local path = StadiumInstall.romPath()
-  if not path then return false, "no ROM in " .. StadiumInstall.ROM_DIR end
+  if not path then
+    local mod = V.mod
+    local okRead, bytes = false, nil
+    if mod and mod.read then okRead, bytes = pcall(mod.read, mod, NAMED[1]) end
+    if not (okRead and type(bytes) == "string" and #bytes > 0) then
+      return false, "no ROM in " .. StadiumInstall.ROM_DIR
+    end
+    return StadiumInstall.beginFrom(bytes, "mod:" .. NAMED[1])
+  end
 
   local okRead, bytes = pcall(f.read, path)
   if not (okRead and type(bytes) == "string") then

@@ -1,7 +1,7 @@
 {
   "id": "DRAMATIC_SHAPE",
   "name": "Dramatic Shape Voxel Mod (Gen2 Port)",
-  "version": "1.8.0-multigen.3",
+  "version": "1.8.0-multigen.4",
   "api": 2,
   "entry": "entry.lua",
   "profile": "content",
@@ -18,7 +18,7 @@
     "engine_internals"
   ],
   "affects_link": false,
-  "description": "Dramatic Shape 1.8.0 for Red, Blue, Yellow, Gold, Silver, Crystal and FireRed, including Generation II map and tileset compatibility.",
+  "description": "Dramatic Shape 1.8.0 for Red, Blue, Yellow, Gold, Silver, Crystal and FireRed, combining the Gen I/II renderer and Stadium support with the current upstream Gen III geometry renderer.",
   "github": "wireproof/dramatic-shape-gen2",
   "update_check": false
 }
