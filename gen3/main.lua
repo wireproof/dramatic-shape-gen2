@@ -946,6 +946,13 @@ local HOTKEYS = {
   ["9"] = Water.setting,
 }
 
+local function disableLegacyGbcFx()
+  local ok, GBCFX = pcall(require, "src.render.GBCFX")
+  if ok and type(GBCFX) == "table" and type(GBCFX.setLevel) == "function" then
+    pcall(GBCFX.setLevel, 0)
+  end
+end
+
 -- One step of the VOXEL angle ladder: everything a "3" press does, named
 -- so the pad's B+SELECT combo (below) can make exactly the same step. The
 -- gate is the registry's own; the tilt/GBC FX clearing is the engine work
@@ -968,7 +975,7 @@ local function cycleVoxel(game)
   -- clears them on EVERY press, not just the press that switches on.
   game.save.options.tilt = 0
   game.save.options.gbcfx = 0
-  require("src.render.GBCFX").setLevel(0)
+  disableLegacyGbcFx()
   require("src.render.Tilt").setLevel(game.save.options.tilt or 0)
   game:writeOptions()
   return true
@@ -1127,7 +1134,6 @@ local function pinEngineFx(game)
   game = game or require("src.core.Game")
   local opts = game and game.save and game.save.options
   local Tilt = require("src.render.Tilt")
-  local GBCFX = require("src.render.GBCFX")
   local changed = false
   if opts then
     changed = (opts.tilt or 0) ~= 0 or (opts.gbcfx or 0) ~= 0
@@ -1136,7 +1142,7 @@ local function pinEngineFx(game)
     opts.battleBg = "white"
   end
   pcall(Tilt.setLevel, 0)
-  pcall(GBCFX.setLevel, 0)
+  disableLegacyGbcFx()
   if changed and game.writeOptions then pcall(game.writeOptions, game) end
 end
 

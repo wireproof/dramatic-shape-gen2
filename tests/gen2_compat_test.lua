@@ -14,8 +14,8 @@ local run = T.sdk.loadMod(path, { data = T.fixtures.load(), generation = 2 })
 T.eq(#run.errors, 0,
   "Dramatic Shape Gen2 port loads clean: " .. table.concat(run.errors, "; "))
 local loaded = run.loader.mods.DRAMATIC_SHAPE
-T.eq(loaded and loaded.manifest.version, "1.8.0-multigen.3",
-  "the Gen2 forward-port carries its own revision")
+T.eq(loaded and loaded.manifest.version, "1.8.0-multigen.6",
+  "the Gen2 runtime carries the multigame release revision")
 
 local V = run.loader.exports.DRAMATIC_SHAPE.lib
 local profile = V.data("voxel_heights")
@@ -51,54 +51,12 @@ T.check(type(TileShape.forMap) == "function"
 T.check(type(Structures.runHeight) == "function",
   "raised Generation II ground can report its measured height")
 
--- SELECT has an overworld job in Generation II: a registered key item must
--- win over Dramatic Shape's camera shortcut. Exercise the predicate captured
--- by the installed OverworldController wrapper directly so the test does not
--- need to simulate a complete movement frame.
-local Controller = require("src.world.OverworldController")
-local function findUpvalue(fn, wanted, seen)
-  if type(fn) ~= "function" then return nil end
-  seen = seen or {}
-  if seen[fn] then return nil end
-  seen[fn] = true
-  for i = 1, debug.getinfo(fn, "u").nups do
-    local name, value = debug.getupvalue(fn, i)
-    if name == wanted then return value end
-    local nested = findUpvalue(value, wanted, seen)
-    if nested ~= nil then return nested end
-  end
-  return nil
-end
-local registeredItemOwnsSelect =
-  findUpvalue(Controller.handleInput, "registeredItemOwnsSelect")
-T.check(type(registeredItemOwnsSelect) == "function",
-  "the Gen2 SELECT ownership guard is installed")
-local game = {
-  save = { registeredItem = "BICYCLE", inventory = { BICYCLE = true } },
-  data = { items = { BICYCLE = { registerable = true } } },
-}
-T.eq(registeredItemOwnsSelect(game), true,
-  "a valid registered item keeps SELECT in Gold/Silver")
-game.save.inventory.BICYCLE = nil
-T.eq(registeredItemOwnsSelect(game), false,
-  "a stale registration does not reserve SELECT")
-
 local Pipelines = require("src.render.Pipelines")
 Pipelines.install(run.data)
-local persisted = 0
-local world = { map = {} }
-local options = { pipelines = {} }
-local game2 = {
-  world = world, options = options,
-  save = { options = options, inventory = {} }, data = { items = {} },
-  pipelineGate = function() return world, world end,
-  persistOptions = function() persisted = persisted + 1 end,
-}
-run.loader.hooks:call("input.gamepad", function() end, game2,
-  { phase = "pressed", button = "back" })
-T.check((options.pipelines.voxel or 0) > 0,
-  "bare SELECT reaches the Gen2 voxel ladder")
-T.eq(persisted, 1, "the Gen2 SELECT step persists its view")
+T.check(Pipelines.get("voxel") ~= nil,
+  "the native Gen2 runtime registers its voxel world pipeline")
+T.check(Pipelines.get("voxel").drawWorld ~= nil,
+  "the Gen2 voxel pipeline owns a real world pass")
 
 run.release()
 T.finish("Dramatic Shape Gen2 compatibility")

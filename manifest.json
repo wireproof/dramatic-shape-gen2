@@ -1,7 +1,7 @@
 {
   "id": "DRAMATIC_SHAPE",
   "name": "Dramatic Shape Voxel Mod (Gen2 Port)",
-  "version": "1.8.0-multigen.5",
+  "version": "1.8.0-multigen.6",
   "api": 2,
   "entry": "entry.lua",
   "profile": "content",
@@ -18,7 +18,7 @@
     "engine_internals"
   ],
   "affects_link": false,
-  "description": "Dramatic Shape 1.8.0 for Red, Blue, Yellow, Gold, Silver, Crystal and FireRed, combining the Gen I/II renderer and Stadium support with the current upstream Gen III geometry renderer.",
+  "description": "Dramatic Shape for Red, Blue, Yellow, Gold, Silver, Crystal and FireRed, dispatching Gen I, UNDERdecoded's native Gen II runtime, and the Gen III geometry renderer independently.",
   "github": "wireproof/dramatic-shape-gen2",
   "update_check": false
 }

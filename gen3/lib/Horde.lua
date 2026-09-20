@@ -388,7 +388,10 @@ function Horde.begin(G)
   Pipelines.syncOptions(G.save.options)
   G.save.options.tilt, G.save.options.gbcfx = 0, 0
   pcall(function() require("src.render.Tilt").setLevel(0) end)
-  pcall(function() require("src.render.GBCFX").setLevel(0) end)
+  pcall(function()
+    local ok, GBCFX = pcall(require, "src.render.GBCFX")
+    if ok and GBCFX and GBCFX.setLevel then GBCFX.setLevel(0) end
+  end)
   pcall(G.writeOptions, G)
 
   -- night, pinned; the gloom wrappers do the rest on top of it
@@ -486,7 +489,10 @@ function Horde.finish(G)
     G.save.options.tilt = snap.tilt or 0
     G.save.options.gbcfx = snap.gbcfx or 0
     require("src.render.Tilt").setLevel(snap.tilt or 0)
-    require("src.render.GBCFX").setLevel(snap.gbcfx or 0)
+    local ok, GBCFX = pcall(require, "src.render.GBCFX")
+    if ok and GBCFX and GBCFX.setLevel then
+      GBCFX.setLevel(snap.gbcfx or 0)
+    end
     G:writeOptions()
   end)
 
