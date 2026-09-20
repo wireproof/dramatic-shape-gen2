@@ -5,7 +5,7 @@ Redistribution of non-derivative code is expressly prohibited after v1.6.0 witho
 > **Multi-generation compatibility port:** this build retains the full Gen I
 > voxel renderer, forward-ports UNDERdecoded's Generation II support, and adds
 > a FireRed-native 240x160 compatibility renderer. The port revision is
-> `1.8.0-multigen.2`.
+> `1.8.0-multigen.3`.
 >
 > **Distribution status:** keep this repository private unless the Dramatic
 > Shape copyright holder grants permission to redistribute the post-1.6.0
@@ -17,9 +17,11 @@ Project](https://github.com/bryanthaboi/pokemon-gen1-recomp-project).
 
 This port targets Red, Blue, Yellow, Gold, Silver, Crystal, and FireRed in
 Gen1Recomp++. The full voxel terrain renderer runs on Generations I and II.
-FireRed uses the mod's selective-focus, colour-pop miniature finish because
+FireRed can use the mod's optional selective-focus, colour-pop miniature finish because
 its native GBA compositor does not expose the Gen I/II block meshes consumed
-by the voxelizer. Press `6` to cycle OFF, SOFT, MEDIUM, and STRONG.
+by the voxelizer. It now starts genuinely OFF; press `SELECT` or `6` while
+free-roaming to cycle OFF, SOFT, MEDIUM, and STRONG. FireRed does not claim
+the Gen I/II first-person or third-person voxel cameras.
 
 The overworld as a voxelized 3D diorama. Also supports experimental
 first-person, third-person and VR.

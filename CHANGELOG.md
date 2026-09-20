@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.8.0-multigen.3
+
+- Keep FireRed's native-frame effect genuinely off by default and migrate away
+  from the old independently enabled blur state.
+- Let bare SELECT cycle the FireRed OFF/SOFT/MEDIUM/STRONG look ladder while
+  preserving SELECT for a registered field item.
+
 ## 1.8.0-multigen.2
 
 - Stop requiring the retired `src.render.GBCFX` module on modern multigame

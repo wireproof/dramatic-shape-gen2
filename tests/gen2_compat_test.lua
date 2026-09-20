@@ -14,7 +14,7 @@ local run = T.sdk.loadMod(path, { data = T.fixtures.load(), generation = 2 })
 T.eq(#run.errors, 0,
   "Dramatic Shape Gen2 port loads clean: " .. table.concat(run.errors, "; "))
 local loaded = run.loader.mods.DRAMATIC_SHAPE
-T.eq(loaded and loaded.manifest.version, "1.8.0-multigen.2",
+T.eq(loaded and loaded.manifest.version, "1.8.0-multigen.3",
   "the Gen2 forward-port carries its own revision")
 
 local V = run.loader.exports.DRAMATIC_SHAPE.lib

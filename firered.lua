@@ -10,6 +10,7 @@
 local mod = ...
 local shader, ping, pong, cw, ch
 local level = 0
+local PIPELINE_ID = "dramatic_firered_view"
 
 local SHADER = [[
   uniform vec2 direction;
@@ -74,7 +75,7 @@ local function present(canvas)
   return b
 end
 
-mod.content.render_pipelines:register("dramatic_firered", {
+mod.content.render_pipelines:register(PIPELINE_ID, {
   label = "DRAMATIC",
   levels = { "OFF", "SOFT", "MEDIUM", "STRONG" },
   hotkey = "6",
@@ -93,33 +94,68 @@ mod.content.render_pipelines:register("dramatic_firered", {
   end,
 })
 
-mod.options:define({
-  { key = "firered_strength", label = "FIRERED LOOK", type = "choice",
-    default = 1, choices = {
-      { "OFF", 0 }, { "SOFT", 1 }, { "MEDIUM", 2 }, { "STRONG", 3 },
-    } },
-})
-
-local function applyDefault(game)
+local function applySavedLevel(game)
   local Pipelines = require("src.render.Pipelines")
   local options = game and game.options or {}
   options.pipelines = options.pipelines or {}
-  if options.pipelines.dramatic_firered == nil then
-    Pipelines.setLevel("dramatic_firered",
-      tonumber(mod.options:get("firered_strength")) or 1)
-    Pipelines.syncOptions(options)
-    if game and game.writeOptions then game:writeOptions() end
-  end
+  -- This new id intentionally does not inherit the old compatibility pass,
+  -- which defaulted to SOFT even when the visible T-SHIFT row said OFF.
+  -- Existing installs therefore migrate to a genuinely untouched frame.
+  Pipelines.setLevel(PIPELINE_ID,
+    tonumber(options.pipelines[PIPELINE_ID]) or 0)
+  Pipelines.syncOptions(options)
 end
 
-mod.events:on("game.ready", function(payload) applyDefault(payload and payload.game) end)
-mod.events:on("mod.options_changed", function(payload)
-  if payload and payload.mod == mod.id and payload.key == "firered_strength" then
-    require("src.render.Pipelines").setLevel("dramatic_firered",
-      tonumber(mod.options:get("firered_strength")) or 0)
-  end
+local function registeredItemOwnsSelect(game)
+  return game and game.session and game.session.registeredItem ~= nil
+end
+
+local function cycleLook(game)
+  if not (game and game.zoomGateOK and game:zoomGateOK()) then return false end
+  if registeredItemOwnsSelect(game) then return false end
+  local Pipelines = require("src.render.Pipelines")
+  Pipelines.cycle(PIPELINE_ID, 1)
+  Pipelines.syncOptions(game.options)
+  if game.writeOptions then game:writeOptions() end
+  return true
+end
+
+mod.events:on("game.ready", function(payload)
+  applySavedLevel(payload and payload.game)
 end)
 
-mod.exports.version = "1.8.0-multigen.2"
+-- FireRed cannot consume the Gen I/II voxel mesh, but SELECT should still be
+-- useful on a handheld: cycle the honest native-frame look ladder. Consume a
+-- physical pad/key press only when no registered field item owns SELECT.
+mod.hooks:wrap("input.gamepad", function(next, game, event)
+  if event and event.phase == "pressed"
+      and (event.button == "back" or event.button == "select")
+      and cycleLook(game) then
+    return
+  end
+  return next(game, event)
+end, 1000)
+
+mod.hooks:wrap("input.key", function(next, game, event)
+  if event and event.phase == "pressed"
+      and (event.key == "tab" or event.key == "lshift"
+        or event.key == "rshift")
+      and cycleLook(game) then
+    return
+  end
+  return next(game, event)
+end, 1000)
+
+mod.hooks:wrap("input.step", function(next, game, dt)
+  local result = next(game, dt)
+  local input = game and game.input
+  if input and input.wasPressed and input:wasPressed("select") then
+    cycleLook(game)
+  end
+  return result
+end, 1000)
+
+mod.exports.version = "1.8.0-multigen.3"
 mod.exports.mode = "firered-miniature"
 mod.exports.isLoading = function() return false end
+mod.exports.cycleFireRedLook = cycleLook
