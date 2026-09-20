@@ -120,6 +120,6 @@ mod.events:on("mod.options_changed", function(payload)
   end
 end)
 
-mod.exports.version = "1.8.0-multigen.1"
+mod.exports.version = "1.8.0-multigen.2"
 mod.exports.mode = "firered-miniature"
 mod.exports.isLoading = function() return false end

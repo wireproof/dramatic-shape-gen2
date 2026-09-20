@@ -1,7 +1,7 @@
 {
   "id": "DRAMATIC_SHAPE",
   "name": "Dramatic Shape Voxel Mod (Gen2 Port)",
-  "version": "1.8.0-multigen.1",
+  "version": "1.8.0-multigen.2",
   "api": 2,
   "entry": "entry.lua",
   "profile": "content",

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.8.0-multigen.2
+
+- Stop requiring the retired `src.render.GBCFX` module on modern multigame
+  hosts; older hosts still have their legacy effect disabled when available.
+- Add real-ROM startup coverage for the seven supported games alongside
+  Kanto/Johto Gear.
+
 ## 1.8.0-multigen.1
 
 - Add an explicit FireRed entry path and 240x160 miniature-focus renderer.

@@ -5,7 +5,7 @@ Redistribution of non-derivative code is expressly prohibited after v1.6.0 witho
 > **Multi-generation compatibility port:** this build retains the full Gen I
 > voxel renderer, forward-ports UNDERdecoded's Generation II support, and adds
 > a FireRed-native 240x160 compatibility renderer. The port revision is
-> `1.8.0-multigen.1`.
+> `1.8.0-multigen.2`.
 >
 > **Distribution status:** keep this repository private unless the Dramatic
 > Shape copyright holder grants permission to redistribute the post-1.6.0
