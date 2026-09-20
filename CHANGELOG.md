@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.8.0-multigen.5
+
+- Align controller activation with UNDERdecoded's current
+  Gen2Recomped-DramaticShapes SELECT design: the host routes bare SELECT into
+  the voxel pipeline when no registered item owns the button.
+- Require Gen3Recomped 0.2.72 for the corrected Gold/Crystal live-world gate
+  and FireRed registered-item fallback.
+- Keep the bundled Stadium ROM lookup compatible with both archive-root and
+  mod-local `baseroms/baserom.z64` paths on Android.
+
 ## 1.8.0-multigen.3
 
 - Keep FireRed's native-frame effect genuinely off by default and migrate away
