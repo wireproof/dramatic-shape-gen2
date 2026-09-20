@@ -6,6 +6,8 @@
   from the old independently enabled blur state.
 - Let bare SELECT cycle the FireRed OFF/SOFT/MEDIUM/STRONG look ladder while
   preserving SELECT for a registered field item.
+- Route bare SELECT through Game2's real controller seam in Gold, Silver, and
+  Crystal, while preserving valid registered-item use.
 
 ## 1.8.0-multigen.2
 

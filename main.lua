@@ -678,20 +678,28 @@ local function cycleVoxel(game)
   -- player can step the ladder: the "3" key, the pad's SELECT, and the VR
   -- left-stick click all come through it.
   if Horde.viewLocked() then return false end
-  local top = game.stack and game.stack:top()
-  if not Pipelines.canToggle("voxel", top, game.overworld) then return false end
+  local top, world
+  if game.pipelineGate then
+    top, world = game:pipelineGate()
+  else
+    top = game.stack and game.stack:top()
+    world = game.overworld
+  end
+  if not Pipelines.canToggle("voxel", top, world) then return false end
   Pipelines.setLevel("voxel", Voxel.nextHotkeyLevel(Pipelines.level("voxel")))
-  Pipelines.syncOptions(game.save.options)
+  local options = (game.save and game.save.options) or game.options
+  Pipelines.syncOptions(options)
   -- 3 is the key that used to turn TILT on and sits next to the one that
   -- used to turn GBC FX on, and this mod has taken both away. A player who
   -- left either running before enabling the mod would otherwise have no
   -- way back to off, and both fight the diorama -- so the VOXEL step
   -- clears them on EVERY press, not just the press that switches on.
-  game.save.options.tilt = 0
-  game.save.options.gbcfx = 0
+  options.tilt = 0
+  options.gbcfx = 0
   disableLegacyGbcFx()
-  require("src.render.Tilt").setLevel(game.save.options.tilt or 0)
-  game:writeOptions()
+  require("src.render.Tilt").setLevel(options.tilt or 0)
+  if game.writeOptions then game:writeOptions()
+  elseif game.persistOptions then game:persistOptions() end
   return true
 end
 
@@ -1289,10 +1297,12 @@ do
     end
     local save = Game and Game.save
     local id = save and save.registeredItem
+    if type(id) == "table" then id = id.id end
     if not id then return false end
     local def = Game.data and Game.data.items and Game.data.items[id]
-    return (def and def.registerable and save.inventory
-            and save.inventory[id]) and true or false
+    local count = save.inventory and save.inventory[id]
+    return (def and (def.registerable or def.canSelect ~= false)
+            and count and count ~= 0) and true or false
   end
   if not OverworldState.dramaticShapeSelectHook then
     local inner = OverworldState.handleInput
@@ -1306,6 +1316,17 @@ do
       return inner(self, ...)
     end
     OverworldState.dramaticShapeSelectHook = true
+  end
+  if GameVersion.generation and GameVersion.generation() == 2 then
+    mod.hooks:wrap("input.gamepad", function(next, game, event)
+      if event and event.phase == "pressed"
+          and (event.button == "back" or event.button == "select")
+          and not registeredItemOwnsSelect(game)
+          and cycleVoxel(game) then
+        return
+      end
+      return next(game, event)
+    end, 1000)
   end
 end
 

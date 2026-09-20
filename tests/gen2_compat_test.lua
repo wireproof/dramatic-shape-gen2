@@ -83,5 +83,22 @@ game.save.inventory.BICYCLE = nil
 T.eq(registeredItemOwnsSelect(game), false,
   "a stale registration does not reserve SELECT")
 
+local Pipelines = require("src.render.Pipelines")
+Pipelines.install(run.data)
+local persisted = 0
+local world = { map = {} }
+local options = { pipelines = {} }
+local game2 = {
+  world = world, options = options,
+  save = { options = options, inventory = {} }, data = { items = {} },
+  pipelineGate = function() return world, world end,
+  persistOptions = function() persisted = persisted + 1 end,
+}
+run.loader.hooks:call("input.gamepad", function() end, game2,
+  { phase = "pressed", button = "back" })
+T.check((options.pipelines.voxel or 0) > 0,
+  "bare SELECT reaches the Gen2 voxel ladder")
+T.eq(persisted, 1, "the Gen2 SELECT step persists its view")
+
 run.release()
 T.finish("Dramatic Shape Gen2 compatibility")
