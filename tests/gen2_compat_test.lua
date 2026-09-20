@@ -1,18 +1,20 @@
 package.path = "./?.lua;./?/init.lua;" .. package.path
 
 local Version = require("src.core.GameVersion")
-assert(Version.set and Version.isGen2,
+assert(Version.set and Version.generation,
   "Dramatic Shape Gen2 compatibility test requires Gen2Recomped")
 Version.set("gold")
+assert(Version.generation() == 2,
+  "Dramatic Shape Gen2 compatibility test requires a Gen II game")
 
 local T = require("tests.modkit")
 local path = os.getenv("DS_MOD_PATH") or "mods/DramaticShapeVoxelMod"
-local run = T.sdk.loadMod(path, { data = T.fixtures.load() })
+local run = T.sdk.loadMod(path, { data = T.fixtures.load(), generation = 2 })
 
 T.eq(#run.errors, 0,
   "Dramatic Shape Gen2 port loads clean: " .. table.concat(run.errors, "; "))
 local loaded = run.loader.mods.DRAMATIC_SHAPE
-T.eq(loaded and loaded.manifest.version, "1.8.0-gen2.1",
+T.eq(loaded and loaded.manifest.version, "1.8.0-multigen.1",
   "the Gen2 forward-port carries its own revision")
 
 local V = run.loader.exports.DRAMATIC_SHAPE.lib

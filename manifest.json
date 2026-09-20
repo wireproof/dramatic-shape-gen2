@@ -1,12 +1,13 @@
 {
   "id": "DRAMATIC_SHAPE",
   "name": "Dramatic Shape Voxel Mod (Gen2 Port)",
-  "version": "1.8.0-gen2.1",
+  "version": "1.8.0-multigen.1",
   "api": 2,
-  "entry": "main.lua",
+  "entry": "entry.lua",
   "profile": "content",
   "category": "GRAPHICS",
   "game_version": "0.0.0-dev || >=0.1.37 <2.0.0",
+  "games": ["red", "blue", "yellow", "gold", "silver", "crystal", "firered"],
   "priority": 100,
   "dependencies": [],
   "optional_dependencies": [],
@@ -17,7 +18,7 @@
     "engine_internals"
   ],
   "affects_link": false,
-  "description": "Dramatic Shape 1.8.0 with Generation II map, tileset, elevation, palette and registered-item compatibility for Gen2Recomped.",
+  "description": "Dramatic Shape 1.8.0 for Red, Blue, Yellow, Gold, Silver, Crystal and FireRed, including Generation II map and tileset compatibility.",
   "github": "wireproof/dramatic-shape-gen2",
   "update_check": false
 }

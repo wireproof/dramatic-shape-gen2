@@ -1274,7 +1274,9 @@ do
   local OverworldState = require("src.world.OverworldController")
   local GameVersion = require("src.core.GameVersion")
   local function registeredItemOwnsSelect(Game)
-    if not (GameVersion.isGen2 and GameVersion.isGen2()) then return false end
+    if not (GameVersion.generation and GameVersion.generation() == 2) then
+      return false
+    end
     local save = Game and Game.save
     local id = save and save.registeredItem
     if not id then return false end
@@ -1388,9 +1390,11 @@ end)
 -- Declared as a transitions record rather than a constant in that file, so the
 -- fade is retunable in data exactly like the eight wipes it answers, and a total
 -- conversion can make it as long or as short as its own pacing wants.
-mod.content.transitions:register(BattleExit.ID, {
-  frames = BattleExit.FRAMES,
-})
+if require("src.core.GameVersion").generation() == 1 then
+  mod.content.transitions:register(BattleExit.ID, {
+    frames = BattleExit.FRAMES,
+  })
+end
 
 BattleExit.install()
 
@@ -1441,7 +1445,7 @@ mod.hooks:wrap("world.tod", function(next, tod, ctx)
   return DayNight.tod()
 end)
 
-mod.exports.version = "1.8.0-gen2.1"
+mod.exports.version = "1.8.0-multigen.1"
 -- exposed so a companion mod can pin its own tiles' shapes or read the
 -- camera without reaching into this mod's file layout
 mod.exports.lib = V

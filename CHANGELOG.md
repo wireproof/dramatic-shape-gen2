@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.8.0-multigen.1
+
+- Add an explicit FireRed entry path and 240x160 miniature-focus renderer.
+- Keep the complete voxel renderer unchanged for Generations I and II.
+- Declare Crystal and FireRed support and add a Gen III SDK test.
+
 ## 1.8.0-gen2.1
 
 ### Added

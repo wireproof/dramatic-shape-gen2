@@ -2,10 +2,10 @@
 
 Redistribution of non-derivative code is expressly prohibited after v1.6.0 without permission.
 
-> **Gen2 compatibility port:** this working build forward-ports
-> UNDERdecoded's Generation II support onto Dramatic Shape 1.8.0. It targets
-> Gen2Recomped `0.5.1b-hotfix` while retaining the Gen 1 features present in
-> the supplied 1.8.0 release. The port revision is `1.8.0-gen2.1`.
+> **Multi-generation compatibility port:** this build retains the full Gen I
+> voxel renderer, forward-ports UNDERdecoded's Generation II support, and adds
+> a FireRed-native 240x160 compatibility renderer. The port revision is
+> `1.8.0-multigen.1`.
 >
 > **Distribution status:** keep this repository private unless the Dramatic
 > Shape copyright holder grants permission to redistribute the post-1.6.0
@@ -15,9 +15,11 @@ Redistribution of non-derivative code is expressly prohibited after v1.6.0 witho
 A mod for the [Pokémon Gen 1 Recompilation
 Project](https://github.com/bryanthaboi/pokemon-gen1-recomp-project).
 
-This port also supports Pokémon Gold and Silver through
-[Gen2Recomped](https://github.com/UNDERdecoded/Gen2Recomped). Pokémon Crystal
-support remains limited by the host rather than claimed by this mod.
+This port targets Red, Blue, Yellow, Gold, Silver, Crystal, and FireRed in
+Gen1Recomp++. The full voxel terrain renderer runs on Generations I and II.
+FireRed uses the mod's selective-focus, colour-pop miniature finish because
+its native GBA compositor does not expose the Gen I/II block meshes consumed
+by the voxelizer. Press `6` to cycle OFF, SOFT, MEDIUM, and STRONG.
 
 The overworld as a voxelized 3D diorama. Also supports experimental
 first-person, third-person and VR.
